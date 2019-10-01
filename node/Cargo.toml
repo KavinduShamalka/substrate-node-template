@@ -87,11 +87,12 @@ package = 'substrate-transaction-pool'
 rev = '7d7e74fb77b6bee2ce9d6ebafcae09caff2d0e50'
 
 [package]
-authors = ['Anonymous']
+authors = ['Jimmy Chu']
 build = 'build.rs'
 edition = '2018'
-name = 'node-template'
+name = 'offchain-rng'
 version = '2.0.0'
+
 [profile.release]
 panic = 'unwind'
 
@@ -99,5 +100,5 @@ panic = 'unwind'
 members = ['runtime']
 
 [[bin]]
-name = 'node-template'
+name = 'offchain-rng'
 path = 'src/main.rs'

@@ -1,7 +1,6 @@
 //! The Substrate Node Template runtime. This can be compiled with `#[no_std]`, ready for Wasm.
 
 #![cfg_attr(not(feature = "std"), no_std)]
-// `construct_runtime!` does a lot of recursion and requires us to increase the limit to 256.
 #![recursion_limit="256"]
 
 // Make the WASM binary available.
@@ -34,35 +33,21 @@ pub use timestamp::Call as TimestampCall;
 pub use balances::Call as BalancesCall;
 pub use sr_primitives::{Permill, Perbill};
 pub use support::{StorageValue, construct_runtime, parameter_types};
+/// Additionally, we need `system` here
+use system::offchain::TransactionSubmitter;
 
-/// An index to a block.
+/// Everything else is as usual
 pub type BlockNumber = u32;
-
-/// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = AnySignature;
-
-/// Some way of identifying an account on the chain. We intentionally make it equivalent
-/// to the public key of our transaction signing scheme.
 pub type AccountId = <Signature as Verify>::Signer;
-
-/// The type for looking up accounts. We don't expect more than 4 billion of them, but you
-/// never know...
 pub type AccountIndex = u32;
-
-/// Balance of an account.
 pub type Balance = u128;
-
-/// Index of a transaction in the chain.
 pub type Index = u32;
-
-/// A hash of some data used by the chain.
 pub type Hash = primitives::H256;
-
-/// Digest item type.
 pub type DigestItem = generic::DigestItem<Hash>;
 
-/// Used for the module template in `./template.rs`
-mod template;
+/// Used our own module`
+mod offchain_rng;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
 /// the specifics of the runtime. They can then be made to be agnostic over specific formats
