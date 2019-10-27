@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 
 CLEAN_FLAG = ARGV[0];
-BINARY="node-template";
+BINARY="offchain-node";
 
 if (CLEAN_FLAG == "clean")
   system("./target/release/#{BINARY} purge-chain --dev && ./target/release/#{BINARY} --dev");
