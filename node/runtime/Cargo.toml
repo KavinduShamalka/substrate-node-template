@@ -3,37 +3,10 @@ authors = ['Anonymous']
 edition = '2018'
 name = 'offchain-node-runtime'
 version = '2.0.0'
-[build-dependencies.wasm-builder-runner]
-package = 'substrate-wasm-builder-runner'
-version = '1.0.2'
 
-[features]
-default = ['std']
-std = [
-    'codec/std',
-    'client/std',
-    'rstd/std',
-    'runtime-io/std',
-    'support/std',
-    'balances/std',
-    'aura/std',
-    'aura-primitives/std',
-    'grandpa/std',
-    'executive/std',
-    'indices/std',
-    'primitives/std',
-    'sr-primitives/std',
-    'randomness-collective-flip/std',
-    'system/std',
-    'timestamp/std',
-    'sudo/std',
-    'transaction-payment/std',
-    'version/std',
-    'serde',
-    'safe-mix/std',
-    'offchain-primitives/std',
-    'substrate-session/std',
-]
+[dependencies]
+app-crypto = { package = "substrate-application-crypto", git = "https://github.com/paritytech/substrate/", rev = "d1cd01c74e8d5550396cb654f9a3f1b641efdf4c", default-features = false }
+
 [dependencies.aura]
 default_features = false
 git = 'https://github.com/paritytech/substrate.git'
@@ -166,3 +139,40 @@ default_features = false
 git = 'https://github.com/paritytech/substrate.git'
 package = 'sr-version'
 rev = 'd1cd01c74e8d5550396cb654f9a3f1b641efdf4c'
+
+[dev-dependencies]
+offchain = { package = "substrate-offchain", git = "https://github.com/paritytech/substrate/", rev = "d1cd01c74e8d5550396cb654f9a3f1b641efdf4c" }
+parking_lot = "0.9.0"
+
+[build-dependencies.wasm-builder-runner]
+package = 'substrate-wasm-builder-runner'
+version = '1.0.2'
+
+[features]
+default = ['std']
+std = [
+    "app-crypto/std",
+    'codec/std',
+    'client/std',
+    'rstd/std',
+    'runtime-io/std',
+    'support/std',
+    'balances/std',
+    'aura/std',
+    'aura-primitives/std',
+    'grandpa/std',
+    'executive/std',
+    'indices/std',
+    'primitives/std',
+    'sr-primitives/std',
+    'randomness-collective-flip/std',
+    'system/std',
+    'timestamp/std',
+    'sudo/std',
+    'transaction-payment/std',
+    'version/std',
+    'serde',
+    'safe-mix/std',
+    'offchain-primitives/std',
+    'substrate-session/std',
+]

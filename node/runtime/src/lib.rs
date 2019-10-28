@@ -34,6 +34,8 @@ pub use timestamp::Call as TimestampCall;
 pub use balances::Call as BalancesCall;
 pub use sr_primitives::{Permill, Perbill};
 pub use support::{StorageValue, construct_runtime, parameter_types, traits::Randomness};
+/// Additionally, we need `system` here
+use system::offchain::TransactionSubmitter;
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -91,8 +93,8 @@ pub mod opaque {
 
 /// This runtime version.
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-	spec_name: create_runtime_str!("node-template"),
-	impl_name: create_runtime_str!("node-template"),
+	spec_name: create_runtime_str!("price-fetch"),
+	impl_name: create_runtime_str!("price-fetch"),
 	authoring_version: 3,
 	spec_version: 4,
 	impl_version: 4,
@@ -235,8 +237,27 @@ impl sudo::Trait for Runtime {
 	type Proposal = Call;
 }
 
+pub mod price_fetch_crypto {
+	pub use crate::price_fetch::KEY_TYPE;
+	use primitives::sr25519;
+	app_crypto::app_crypto!(sr25519, KEY_TYPE);
+
+	impl From<Signature> for super::Signature {
+		fn from(a: Signature) -> Self {
+			sr25519::Signature::from(a).into()
+		}
+	}
+}
+
+/// We need to define the Transaction signer for that using the Key definition
+type OffchainAccount = price_fetch_crypto::Public;
+type SubmitTransaction = TransactionSubmitter<OffchainAccount, Runtime, UncheckedExtrinsic>;
+
 impl price_fetch::Trait for Runtime {
+	type Call = Call;
 	type Event = Event;
+	type SubmitTransaction = SubmitTransaction;
+	type KeyType = OffchainAccount;
 }
 
 construct_runtime!(

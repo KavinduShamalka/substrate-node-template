@@ -8,15 +8,36 @@
 /// For more guidance on Substrate modules, see the example module
 /// https://github.com/paritytech/substrate/blob/master/srml/example/src/lib.rs
 
+// We have to import a few things
+use rstd::prelude::*;
+use app_crypto::RuntimeAppPublic;
 use support::{decl_module, decl_storage, decl_event, dispatch::Result};
-use system::ensure_signed;
+use system::{ensure_signed, ensure_root};
+use system::offchain::SubmitSignedTransaction;
+use codec::{Encode, Decode};
+
+/// Our local KeyType.
+///
+/// For security reasons the offchain worker doesn't have direct access to the keys
+/// but only to app-specific subkeys, which are defined and grouped by their `KeyTypeId`.
+/// We define it here as `ofcb` (for `offchain callback`). Yours should be specific to
+/// the module you are actually building.
+pub const KEY_TYPE: app_crypto::KeyTypeId = app_crypto::KeyTypeId(*b"ofpf");
 
 /// The module's configuration trait.
 pub trait Trait: system::Trait {
-	// TODO: Add other types and constants required configure this module.
-
 	/// The overarching event type.
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
+
+	/// A dispatchable call type. We need to define it for the offchain worker to
+	/// reference the `pong` function it wants to call.
+	type Call: From<Call<Self>>;
+
+	/// Let's define the helper we use to create signed transactions with
+	type SubmitTransaction: SubmitSignedTransaction<Self, <Self as Trait>::Call>;
+
+	/// The local keytype
+	type KeyType: RuntimeAppPublic + From<Self::AccountId> + Into<Self::AccountId> + Clone;
 }
 
 // This module's storage items.

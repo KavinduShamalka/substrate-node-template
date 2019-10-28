@@ -2224,6 +2224,7 @@ name = "offchain-node-runtime"
 version = "2.0.0"
 dependencies = [
  "parity-scale-codec 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "parking_lot 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "safe-mix 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.101 (registry+https://github.com/rust-lang/crates.io-index)",
  "sr-io 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=d1cd01c74e8d5550396cb654f9a3f1b641efdf4c)",
@@ -2241,8 +2242,10 @@ dependencies = [
  "srml-system 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=d1cd01c74e8d5550396cb654f9a3f1b641efdf4c)",
  "srml-timestamp 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=d1cd01c74e8d5550396cb654f9a3f1b641efdf4c)",
  "srml-transaction-payment 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=d1cd01c74e8d5550396cb654f9a3f1b641efdf4c)",
+ "substrate-application-crypto 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=d1cd01c74e8d5550396cb654f9a3f1b641efdf4c)",
  "substrate-client 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=d1cd01c74e8d5550396cb654f9a3f1b641efdf4c)",
  "substrate-consensus-aura-primitives 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=d1cd01c74e8d5550396cb654f9a3f1b641efdf4c)",
+ "substrate-offchain 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=d1cd01c74e8d5550396cb654f9a3f1b641efdf4c)",
  "substrate-offchain-primitives 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=d1cd01c74e8d5550396cb654f9a3f1b641efdf4c)",
  "substrate-primitives 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=d1cd01c74e8d5550396cb654f9a3f1b641efdf4c)",
  "substrate-session 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=d1cd01c74e8d5550396cb654f9a3f1b641efdf4c)",

@@ -1,7 +1,7 @@
 use primitives::{Pair, Public};
-use node_template_runtime::{
+use offchain_node_runtime::{
 	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig,
-	SudoConfig, IndicesConfig, SystemConfig, WASM_BINARY, 
+	SudoConfig, IndicesConfig, SystemConfig, WASM_BINARY,
 };
 use aura_primitives::sr25519::{AuthorityId as AuraId};
 use grandpa_primitives::{AuthorityId as GrandpaId};
@@ -32,7 +32,7 @@ pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Pu
 }
 
 /// Helper function to generate an authority key for Aura
-pub fn get_authority_keys_from_seed(s: &str) -> (AuraId, GrandpaId) { 
+pub fn get_authority_keys_from_seed(s: &str) -> (AuraId, GrandpaId) {
 	(
 		get_from_seed::<AuraId>(s),
 		get_from_seed::<GrandpaId>(s),
@@ -69,7 +69,7 @@ impl Alternative {
 				|| testnet_genesis(vec![
 					get_authority_keys_from_seed("Alice"),
 					get_authority_keys_from_seed("Bob"),
-				], 
+				],
 				get_from_seed::<AccountId>("Alice"),
 				vec![
 					get_from_seed::<AccountId>("Alice"),
@@ -105,7 +105,7 @@ impl Alternative {
 }
 
 fn testnet_genesis(initial_authorities: Vec<(AuraId, GrandpaId)>,
-	root_key: AccountId, 
+	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
 	_enable_println: bool) -> GenesisConfig {
 	GenesisConfig {
