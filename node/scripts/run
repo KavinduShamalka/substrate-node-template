@@ -1,10 +1,18 @@
 #!/usr/bin/env ruby
 
-CLEAN_FLAG = ARGV[0];
+EXE_FLAG = ARGV[0];
 BINARY="offchain-node";
+RUNTIME="offchain-node-runtime";
 
-if (CLEAN_FLAG == "clean")
+if (EXE_FLAG == "check")
+  system("cargo check -p #{RUNTIME}")
+
+elsif (EXE_FLAG == "build")
+  system("cargo build --release")
+
+elsif (EXE_FLAG == "clean")
   system("./target/release/#{BINARY} purge-chain --dev && ./target/release/#{BINARY} --dev");
+
 else
   system("./target/release/#{BINARY} --dev");
 end

@@ -25,7 +25,7 @@ use codec::{Encode, Decode};
 pub const KEY_TYPE: app_crypto::KeyTypeId = app_crypto::KeyTypeId(*b"ofpf");
 
 /// The module's configuration trait.
-pub trait Trait: system::Trait {
+pub trait Trait: timestamp::Trait + system::Trait {
 	/// The overarching event type.
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 
@@ -40,13 +40,29 @@ pub trait Trait: system::Trait {
 	type KeyType: RuntimeAppPublic + From<Self::AccountId> + Into<Self::AccountId> + Clone;
 }
 
+/// The type of requests we can send to the offchain worker
+#[cfg_attr(feature = "std", derive(PartialEq, Debug))]
+#[derive(Encode, Decode)]
+pub enum OffchainRequest<T: system::Trait> {
+	/// If an authorised offchain worker sees this ping, it shall respond with a `pong` call
+	PriceFetch(<T as system::Trait>::AccountId)
+}
+
+decl_event!(
+	pub enum Event<T> where
+		Moment = <T as timestamp::Trait>::Moment {
+
+		PriceFetched(Vec<u8>, Moment, u32, u32),
+	}
+);
+
 // This module's storage items.
 decl_storage! {
-	trait Store for Module<T: Trait> as TemplateModule {
-		// Just a dummy storage item.
-		// Here we are declaring a StorageValue, `Something` as a Option<u32>
-		// `get(something)` is the default getter which returns either the stored `u32` or `None` if nothing stored
-		Something get(something): Option<u32>;
+	trait Store for Module<T: Trait> as PriceFetch {
+		OcRequests get(oc_requests): Vec<OffchainRequest<T>>;
+
+		// using a tuple struct, 1st value is dollar, 2nd value is cent
+		Prices get(prices): map Vec<u8> => (u32, u32);
 	}
 }
 
@@ -58,32 +74,31 @@ decl_module! {
 		// this is needed only if you are using events in your module
 		fn deposit_event() = default;
 
+		// Clean the state on initialization of the block
+		fn on_initialize(_block: T::BlockNumber) {
+			// DEBUGGING
+			runtime_io::print_utf8(b"on_initialize");
+			<Self as Store>::OcRequests::kill();
+		}
+
 		// Just a dummy entry point.
 		// function that can be called by the external world as an extrinsics call
 		// takes a parameter of the type `AccountId`, stores it and emits an event
-		pub fn do_something(origin, something: u32) -> Result {
+		pub fn kickoff_pricefetch(origin) -> Result {
 			// TODO: You only need this if you want to check it was signed.
 			let who = ensure_signed(origin)?;
 
-			// TODO: Code to execute when something calls this.
-			// For example: the following line stores the passed in u32 in the storage
-			Something::put(something);
-
-			// here we are raising the Something event
-			Self::deposit_event(RawEvent::SomethingStored(something, who));
+			// DEBUGGING
+			runtime_io::print_utf8(b"kickoff_pricefetch");
+			<Self as Store>::OcRequests::mutate(|v| v.push(OffchainRequest::PriceFetch(who)));
 			Ok(())
+		}
+
+		fn offchain_worker(_block: T::BlockNumber) {
+			runtime_io::print_utf8(b"offchain_worker");
 		}
 	}
 }
-
-decl_event!(
-	pub enum Event<T> where AccountId = <T as system::Trait>::AccountId {
-		// Just a dummy event.
-		// Event `Something` is declared with a parameter of the type `u32` and `AccountId`
-		// To emit this event, we call the deposit funtion, from our runtime funtions
-		SomethingStored(u32, AccountId),
-	}
-);
 
 /// tests for this module
 #[cfg(test)]
