@@ -24,6 +24,17 @@ use codec::{Encode, Decode};
 /// the module you are actually building.
 pub const KEY_TYPE: app_crypto::KeyTypeId = app_crypto::KeyTypeId(*b"ofpf");
 
+pub const FETCHED_CRYPTOS: [(&'static [u8], &'static [u8], &'static [u8]); 4] = [
+	(b"BTC", b"coincap",
+		b"https://api.coincap.io/v2/assets/bitcoin"),
+	(b"BTC", b"coinmarketcap",
+		b"https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=2e6d8847-bcea-4999-87b1-ad452efe4e40&symbol=BTC"),
+	(b"ETH", b"coincap",
+		b"https://api.coincap.io/v2/assets/ethereum"),
+	(b"ETH", b"coinmarketcap",
+		b"https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=2e6d8847-bcea-4999-87b1-ad452efe4e40&symbol=ETH"),
+];
+
 /// The module's configuration trait.
 pub trait Trait: timestamp::Trait + system::Trait {
 	/// The overarching event type.
@@ -45,7 +56,7 @@ pub trait Trait: timestamp::Trait + system::Trait {
 #[derive(Encode, Decode)]
 pub enum OffchainRequest<T: system::Trait> {
 	/// If an authorised offchain worker sees this ping, it shall respond with a `pong` call
-	PriceFetch(<T as system::Trait>::AccountId)
+	PriceFetch(<T as system::Trait>::AccountId, (Vec<u8>, Vec<u8>, Vec<u8>))
 }
 
 decl_event!(
@@ -85,18 +96,41 @@ decl_module! {
 		// function that can be called by the external world as an extrinsics call
 		// takes a parameter of the type `AccountId`, stores it and emits an event
 		pub fn kickoff_pricefetch(origin) -> Result {
-			// TODO: You only need this if you want to check it was signed.
 			let who = ensure_signed(origin)?;
 
 			// DEBUGGING
 			runtime_io::print_utf8(b"kickoff_pricefetch");
-			<Self as Store>::OcRequests::mutate(|v| v.push(OffchainRequest::PriceFetch(who)));
+
+			for fetch in FETCHED_CRYPTOS.iter() {
+				<Self as Store>::OcRequests::mutate(|v|
+					v.push(OffchainRequest::PriceFetch(who.clone(),
+						(fetch.0.to_vec(), fetch.1.to_vec(), fetch.2.to_vec())
+					))
+				);
+			}
+
 			Ok(())
 		}
 
 		fn offchain_worker(_block: T::BlockNumber) {
-			runtime_io::print_utf8(b"offchain_worker");
+			runtime_io::print_utf8(b"offchain_worker kick in");
+
+			let fetches = Self::oc_requests();
+			for fetch in fetches {
+				if let OffchainRequest::PriceFetch(who, fetch_info) = fetch {
+					Self::fetch_price(who, fetch_info);
+				}
+			}
 		}
+
+	}
+}
+
+impl<T: Trait> Module<T> {
+	fn fetch_price(key: T::AccountId, fetch_info: (Vec<u8>, Vec<u8>, Vec<u8>)) {
+		runtime_io::print_utf8(&fetch_info.0);
+		runtime_io::print_utf8(&fetch_info.1);
+		runtime_io::print_utf8(&fetch_info.2);
 	}
 }
 
