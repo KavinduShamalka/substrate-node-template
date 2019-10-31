@@ -17,6 +17,8 @@ use system::{ensure_signed};
 use system::offchain::{SubmitSignedTransaction};
 use codec::{Encode, Decode};
 
+use serde_json::{Result as JSON_Result, Value as JSON_Value};
+
 type StdResult<T> = core::result::Result<T, ()>;
 
 /// Our local KeyType.
@@ -139,9 +141,23 @@ impl<T: Trait> Module<T> {
 		let id = runtime_io::http_request_start("GET",
 			rstd::str::from_utf8(&fetch_info.2).unwrap(), &[])?;
 		let _status = runtime_io::http_response_wait(&[id], None);
-		let mut buffer = vec![0; 1024];
+		let mut buffer = vec![0; 10240];
 		let _read = runtime_io::http_response_read_body(id, &mut buffer, None).map_err(|_e| ());
-		runtime_io::print_utf8(&buffer);
+		// runtime_io::print_utf8(&buffer);
+
+		let json: JSON_Value = serde_json::from_slice(&buffer).map_err(|_e| ())?;
+
+		let json_val = match fetch_info.1.as_slice() {
+			b"coincap" => json["data"]["priceUsd"],
+			b"coinmarketcap" => match fetch_info.0.as_slice() {
+				b"BTC" => json["data"]["BTC"]["quote"]["USD"]["price"],
+				b"ETH" => json["data"]["ETH"]["quote"]["USD"]["price"],
+				_ => return Err(()),
+			},
+			_ => return Err(()),
+		};
+
+		runtime_io::print_utf8(json_val.as_str().unwrap().as_bytes());
 
 		Ok(())
 	}

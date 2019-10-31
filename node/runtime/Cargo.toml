@@ -6,6 +6,7 @@ version = '2.0.0'
 
 [dependencies]
 app-crypto = { package = "substrate-application-crypto", git = "https://github.com/paritytech/substrate/", rev = "d1cd01c74e8d5550396cb654f9a3f1b641efdf4c", default-features = false }
+serde_json = "1.0.41"
 
 [dependencies.aura]
 default_features = false
