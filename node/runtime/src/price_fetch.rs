@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
 /// A runtime module template with necessary imports
 
 /// Feel free to remove or edit this file as needed.
@@ -17,6 +19,7 @@ use system::{ensure_signed};
 use system::offchain::{SubmitSignedTransaction};
 use codec::{Encode, Decode};
 
+use serde;
 use serde_json::{Result as JSON_Result, Value as JSON_Value};
 
 type StdResult<T> = core::result::Result<T, ()>;
@@ -143,6 +146,7 @@ impl<T: Trait> Module<T> {
 		let _status = runtime_io::http_response_wait(&[id], None);
 		let mut buffer = vec![0; 10240];
 		let _read = runtime_io::http_response_read_body(id, &mut buffer, None).map_err(|_e| ());
+		// Here contains the whole JSON blob
 		// runtime_io::print_utf8(&buffer);
 
 		let json: JSON_Value = serde_json::from_slice(&buffer).map_err(|_e| ())?;
