@@ -4,14 +4,11 @@ BINARY="offchain-node";
 RUNTIME="offchain-node-runtime";
 
 if (EXE_FLAG == "check")
-  system("cargo check --release -p #{RUNTIME}")
-
+  system("cargo +nightly check --release -p #{RUNTIME}")
 elsif (EXE_FLAG == "build")
-  system("cargo build --release")
-
+  system("cargo +nightly build --release")
 elsif (EXE_FLAG == "clean")
   system("./target/release/#{BINARY} purge-chain --dev && ./target/release/#{BINARY} --dev");
-
 else
   system("./target/release/#{BINARY} --dev");
 end
