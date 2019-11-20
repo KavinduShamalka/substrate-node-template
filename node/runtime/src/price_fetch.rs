@@ -1,5 +1,3 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-
 /// A runtime module template with necessary imports
 
 /// Feel free to remove or edit this file as needed.
@@ -18,9 +16,6 @@ use support::{decl_module, decl_storage, decl_event, dispatch::Result};
 use system::{ensure_signed};
 use system::offchain::{SubmitSignedTransaction};
 use codec::{Encode, Decode};
-
-use serde;
-use serde_json::{Result as JSON_Result, Value as JSON_Value};
 
 type StdResult<T> = core::result::Result<T, ()>;
 
@@ -63,7 +58,7 @@ pub trait Trait: timestamp::Trait + system::Trait {
 #[cfg_attr(feature = "std", derive(PartialEq, Debug))]
 #[derive(Encode, Decode)]
 pub enum OffchainRequest<T: system::Trait> {
-	/// If an authorised offchain worker sees this ping, it shall respond with a `pong` call
+	/// If an authorised offchain worker sees this, will kick off to work
 	PriceFetch(<T as system::Trait>::AccountId, (Vec<u8>, Vec<u8>, Vec<u8>))
 }
 
@@ -80,7 +75,7 @@ decl_storage! {
 	trait Store for Module<T: Trait> as PriceFetch {
 		OcRequests get(oc_requests): Vec<OffchainRequest<T>>;
 
-		// using a tuple struct, 1st value is dollar, 2nd value is cent
+		// using a tuple struct, 1st value is dollar, 2nd value is cent up to 4 digits
 		Prices get(prices): map Vec<u8> => (u32, u32);
 	}
 }
@@ -95,24 +90,20 @@ decl_module! {
 
 		// Clean the state on initialization of the block
 		fn on_initialize(_block: T::BlockNumber) {
-			// DEBUGGING
 			runtime_io::print_utf8(b"on_initialize");
 			<Self as Store>::OcRequests::kill();
 		}
 
-		// Just a dummy entry point.
-		// function that can be called by the external world as an extrinsics call
-		// takes a parameter of the type `AccountId`, stores it and emits an event
 		pub fn kickoff_pricefetch(origin) -> Result {
 			let who = ensure_signed(origin)?;
 
-			// DEBUGGING
 			runtime_io::print_utf8(b"kickoff_pricefetch");
 
-			for fetch in FETCHED_CRYPTOS.iter() {
+			for cyrpto_info in FETCHED_CRYPTOS.iter() {
 				<Self as Store>::OcRequests::mutate(|v|
-					v.push(OffchainRequest::PriceFetch(who.clone(),
-						(fetch.0.to_vec(), fetch.1.to_vec(), fetch.2.to_vec())
+					v.push(OffchainRequest::PriceFetch(
+						who.clone(),
+						(cyrpto_info.0.to_vec(), cyrpto_info.1.to_vec(), cyrpto_info.2.to_vec())
 					))
 				);
 			}
@@ -123,46 +114,45 @@ decl_module! {
 		fn offchain_worker(_block: T::BlockNumber) {
 			runtime_io::print_utf8(b"offchain_worker kick in");
 
-			let fetches = Self::oc_requests();
-			for fetch in fetches {
-				if let OffchainRequest::PriceFetch(who, fetch_info) = fetch {
-					// enhancement: group the fetch together and send an array to `http_response_wait` in one
-					//   go.
-					Self::fetch_price(who, fetch_info);
-				}
+			for fetch_info in Self::oc_requests() {
+				// enhancement: group the fetch together and send an array to
+				//   `http_response_wait` in one go.
+				let _ = match fetch_info {
+					OffchainRequest::PriceFetch(who, crypto_info) => Self::fetch_price(who, crypto_info)
+				};
 			}
-		}
+		} // end of `fn offchain_worker`
 	}
 }
 
 impl<T: Trait> Module<T> {
-	fn fetch_price(_key: T::AccountId, fetch_info: (Vec<u8>, Vec<u8>, Vec<u8>)) -> StdResult<()> {
-		runtime_io::print_utf8(&fetch_info.0);
-		runtime_io::print_utf8(&fetch_info.1);
-		runtime_io::print_utf8(&fetch_info.2);
+	fn fetch_price(_key: T::AccountId, crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>)) -> StdResult<()> {
+		runtime_io::print_utf8(&crypto_info.0);
+		runtime_io::print_utf8(&crypto_info.1);
+		runtime_io::print_utf8(&crypto_info.2);
 		runtime_io::print_utf8(b"---");
 		let id = runtime_io::http_request_start("GET",
-			rstd::str::from_utf8(&fetch_info.2).unwrap(), &[])?;
+			rstd::str::from_utf8(&crypto_info.2).unwrap(), &[])?;
 		let _status = runtime_io::http_response_wait(&[id], None);
 		let mut buffer = vec![0; 10240];
 		let _read = runtime_io::http_response_read_body(id, &mut buffer, None).map_err(|_e| ());
-		// Here contains the whole JSON blob
-		// runtime_io::print_utf8(&buffer);
 
-		let json: JSON_Value = serde_json::from_slice(&buffer).map_err(|_e| ())?;
+		// The whole JSON blob
+		runtime_io::print_utf8(&buffer);
 
-		let json_val = match fetch_info.1.as_slice() {
-			b"coincap" => json["data"]["priceUsd"],
-			b"coinmarketcap" => match fetch_info.0.as_slice() {
-				b"BTC" => json["data"]["BTC"]["quote"]["USD"]["price"],
-				b"ETH" => json["data"]["ETH"]["quote"]["USD"]["price"],
-				_ => return Err(()),
-			},
-			_ => return Err(()),
-		};
+		// let json: JSON_Value = serde_json::from_slice(&buffer).map_err(|_e| ())?;
+		// let json_val = match fetch_info.1.as_slice() {
+		// 	b"coincap" => &json["data"]["priceUsd"],
+		// 	b"coinmarketcap" => match fetch_info.0.as_slice() {
+		// 		b"BTC" => &json["data"]["BTC"]["quote"]["USD"]["price"],
+		// 		b"ETH" => &json["data"]["ETH"]["quote"]["USD"]["price"],
+		// 		_ => return Err(()),
+		// 	},
+		// 	_ => return Err(()),
+		// };
 
-		runtime_io::print_utf8(json_val.as_str().unwrap().as_bytes());
-
+		// runtime_io::print_utf8(json_val.as_str().unwrap().as_bytes());
+		// now, send this back to on-chain
 		Ok(())
 	}
 }

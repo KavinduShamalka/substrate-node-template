@@ -90,14 +90,14 @@ default-features = false
 version = '1.0.0'
 
 [dependencies.serde]
+default_features = false
 features = ['derive']
 optional = true
 version = '1.0.101'
 
-[dependencies.serde_json]
-# default_features = false
-optional = true
-version = '1.0.41'
+# [dependencies.serde-json-core]
+# default-features = false
+# version = '0.0.1'
 
 [dependencies.sr-primitives]
 default_features = false
@@ -176,8 +176,7 @@ std = [
     'sudo/std',
     'transaction-payment/std',
     'version/std',
-    'serde',
-    'serde_json',
+    'serde/std',
     'safe-mix/std',
     'offchain-primitives/std',
     'substrate-session/std',
