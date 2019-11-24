@@ -2227,6 +2227,7 @@ dependencies = [
  "parking_lot 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "safe-mix 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.101 (registry+https://github.com/rust-lang/crates.io-index)",
+ "simple-json 0.1.0 (git+https://github.com/jimmychu0807/simple-json)",
  "sr-io 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=d1cd01c74e8d5550396cb654f9a3f1b641efdf4c)",
  "sr-primitives 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=d1cd01c74e8d5550396cb654f9a3f1b641efdf4c)",
  "sr-std 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=d1cd01c74e8d5550396cb654f9a3f1b641efdf4c)",
@@ -3160,6 +3161,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "winapi 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi-build 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "simple-json"
+version = "0.1.0"
+source = "git+https://github.com/jimmychu0807/simple-json#1e13b17fdc106b7cf55a4bef5287f250c365d99f"
+dependencies = [
+ "paste 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -5624,6 +5633,7 @@ dependencies = [
 "checksum sha2 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7b4d8bfd0e469f417657573d8451fb33d16cfe0989359b93baf3a1ffc639543d"
 "checksum sha3 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)" = "dd26bc0e7a2e3a7c959bc494caf58b72ee0c71d67704e9520f736ca7e4853ecf"
 "checksum shell32-sys 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "9ee04b46101f57121c9da2b151988283b6beb79b34f5bb29a58ee48cb695122c"
+"checksum simple-json 0.1.0 (git+https://github.com/jimmychu0807/simple-json)" = "<none>"
 "checksum slab 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)" = "c111b5bd5695e56cffe5129854aa230b39c93a305372fdbb2668ca2394eea9f8"
 "checksum slog 2.5.2 (registry+https://github.com/rust-lang/crates.io-index)" = "1cc9c640a4adbfbcc11ffb95efe5aa7af7309e002adab54b185507dbf2377b99"
 "checksum slog-async 2.3.0 (git+https://github.com/paritytech/slog-async)" = "<none>"

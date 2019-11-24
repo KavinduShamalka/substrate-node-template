@@ -95,9 +95,10 @@ features = ['derive']
 optional = true
 version = '1.0.101'
 
-# [dependencies.serde-json-core]
-# default-features = false
-# version = '0.0.1'
+[dependencies.simple-json]
+git = 'https://github.com/jimmychu0807/simple-json'
+optional = true
+version = '0.1.0'
 
 [dependencies.sr-primitives]
 default_features = false
@@ -177,6 +178,7 @@ std = [
     'transaction-payment/std',
     'version/std',
     'serde/std',
+    'simple-json',
     'safe-mix/std',
     'offchain-primitives/std',
     'substrate-session/std',

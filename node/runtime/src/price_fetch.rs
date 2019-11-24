@@ -12,12 +12,31 @@
 use rstd::prelude::*;
 use app_crypto::RuntimeAppPublic;
 use support::{decl_module, decl_storage, decl_event, dispatch::Result};
-// use system::{ensure_signed, ensure_root};
-use system::{ensure_signed};
-use system::offchain::{SubmitSignedTransaction};
+use system::ensure_signed;
+use system::offchain::SubmitSignedTransaction;
 use codec::{Encode, Decode};
 
+#[cfg(feature = "std")]
+use simple_json::{self, json::JsonValue, parser::Parser};
+
 type StdResult<T> = core::result::Result<T, ()>;
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub struct Price {
+	dollars: u32,
+	cents: u32, // up to 4 digits
+	currency: Vec<u8>,
+}
+
+impl Price {
+	fn new(dollars: u32, cents: u32, currency: Option<Vec<u8>>) -> Price {
+		match currency {
+			Some(curr) => Price{dollars, cents, currency: curr},
+			None => Price{dollars, cents, currency: b"usd".to_vec()}
+		}
+	}
+}
 
 /// Our local KeyType.
 ///
@@ -27,15 +46,15 @@ type StdResult<T> = core::result::Result<T, ()>;
 /// the module you are actually building.
 pub const KEY_TYPE: app_crypto::KeyTypeId = app_crypto::KeyTypeId(*b"ofpf");
 
-pub const FETCHED_CRYPTOS: [(&'static [u8], &'static [u8], &'static [u8]); 4] = [
+pub const FETCHED_CRYPTOS: [(&'static [u8], &'static [u8], &'static [u8]); 1] = [
 	(b"BTC", b"coincap",
 		b"https://api.coincap.io/v2/assets/bitcoin"),
-	(b"BTC", b"coinmarketcap",
-		b"https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=2e6d8847-bcea-4999-87b1-ad452efe4e40&symbol=BTC"),
-	(b"ETH", b"coincap",
-		b"https://api.coincap.io/v2/assets/ethereum"),
-	(b"ETH", b"coinmarketcap",
-		b"https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=2e6d8847-bcea-4999-87b1-ad452efe4e40&symbol=ETH"),
+	// (b"BTC", b"coinmarketcap",
+	// 	b"https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=2e6d8847-bcea-4999-87b1-ad452efe4e40&symbol=BTC"),
+	// (b"ETH", b"coincap",
+	// 	b"https://api.coincap.io/v2/assets/ethereum"),
+	// (b"ETH", b"coinmarketcap",
+	// 	b"https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=2e6d8847-bcea-4999-87b1-ad452efe4e40&symbol=ETH"),
 ];
 
 /// The module's configuration trait.
@@ -65,18 +84,15 @@ pub enum OffchainRequest<T: system::Trait> {
 decl_event!(
 	pub enum Event<T> where
 		Moment = <T as timestamp::Trait>::Moment {
-
-		PriceFetched(Vec<u8>, Moment, u32, u32),
+		PriceFetched(Vec<u8>, Vec<u8>, Moment, Option<Price>),
 	}
 );
 
 // This module's storage items.
 decl_storage! {
 	trait Store for Module<T: Trait> as PriceFetch {
-		OcRequests get(oc_requests): Vec<OffchainRequest<T>>;
-
-		// using a tuple struct, 1st value is dollar, 2nd value is cent up to 4 digits
-		Prices get(prices): map Vec<u8> => (u32, u32);
+		pub OcRequests get(oc_requests): Vec<OffchainRequest<T>>;
+		pub PricePoints: map (Vec<u8>, Vec<u8>) => Vec<(T::Moment, Option<Price>)>;
 	}
 }
 
@@ -90,14 +106,11 @@ decl_module! {
 
 		// Clean the state on initialization of the block
 		fn on_initialize(_block: T::BlockNumber) {
-			runtime_io::print_utf8(b"on_initialize");
 			<Self as Store>::OcRequests::kill();
 		}
 
 		pub fn kickoff_pricefetch(origin) -> Result {
 			let who = ensure_signed(origin)?;
-
-			runtime_io::print_utf8(b"kickoff_pricefetch");
 
 			for cyrpto_info in FETCHED_CRYPTOS.iter() {
 				<Self as Store>::OcRequests::mutate(|v|
@@ -107,13 +120,28 @@ decl_module! {
 					))
 				);
 			}
+			Ok(())
+		}
 
+		pub fn record_price(origin, crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>), price: Option<Price>) -> Result {
+			runtime_io::print_utf8(b"-- record_price");
+
+			// TODO: add mechanism to check origin has to be trusted (session key, etc)
+			let sender = ensure_signed(origin)?;
+
+			let (symbol, source) = (crypto_info.0, crypto_info.1);
+			let now = <timestamp::Module<T>>::get();
+
+			// Spit out an event and Add to storage
+			Self::deposit_event(RawEvent::PriceFetched(
+				symbol.clone(), source.clone(), now.clone(), price.clone()));
+			let price_pt = (now, price);
+			<PricePoints<T>>::mutate((symbol, source), |vec| vec.push(price_pt));
 			Ok(())
 		}
 
 		fn offchain_worker(_block: T::BlockNumber) {
-			runtime_io::print_utf8(b"offchain_worker kick in");
-
+			#[cfg(feature = "std")]
 			for fetch_info in Self::oc_requests() {
 				// enhancement: batch the fetches together and send an array to
 				//   `http_response_wait` in one go.
@@ -126,7 +154,8 @@ decl_module! {
 }
 
 impl<T: Trait> Module<T> {
-	fn fetch_price(_key: T::AccountId, crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>)) -> StdResult<()> {
+	#[cfg(feature = "std")]
+	fn fetch_price(key: T::AccountId, crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>)) -> StdResult<()> {
 		runtime_io::print_utf8(&crypto_info.0);
 		runtime_io::print_utf8(&crypto_info.1);
 		runtime_io::print_utf8(&crypto_info.2);
@@ -136,7 +165,6 @@ impl<T: Trait> Module<T> {
 		let _status = runtime_io::http_response_wait(&[id], None);
 
 		let mut json_result: Vec<u8> = vec![];
-
 		loop {
 			let mut buffer = vec![0; 1024];
 			let _read = runtime_io::http_response_read_body(id, &mut buffer, None).map_err(|_e| ());
@@ -144,23 +172,34 @@ impl<T: Trait> Module<T> {
 			if _read == Ok(0) { break }
 		}
 
-		// The whole JSON blob
+		// Print the whole JSON blob
 		runtime_io::print_utf8(&json_result);
 
-		// let json: JSON_Value = serde_json::from_slice(&buffer).map_err(|_e| ())?;
-		// let json_val = match fetch_info.1.as_slice() {
-		// 	b"coincap" => &json["data"]["priceUsd"],
-		// 	b"coinmarketcap" => match fetch_info.0.as_slice() {
-		// 		b"BTC" => &json["data"]["BTC"]["quote"]["USD"]["price"],
-		// 		b"ETH" => &json["data"]["ETH"]["quote"]["USD"]["price"],
-		// 		_ => return Err(()),
-		// 	},
-		// 	_ => return Err(()),
-		// };
+		let json_obj: JsonValue = simple_json::parse_json(
+			&rstd::str::from_utf8(&json_result).unwrap()).unwrap();
 
-		// runtime_io::print_utf8(json_val.as_str().unwrap().as_bytes());
-		// now, send this back to on-chain
-		Ok(())
+		runtime_io::print_utf8(b"-- finish parsing");
+
+		let price = match crypto_info.1.as_slice() {
+			src if src == b"coincap" => Self::fetch_price_from_coincap(json_obj),
+		  src if src == b"coinmarketcap" => Self::fetch_price_from_coinmarketcap(json_obj),
+		  _ => panic!("unknown source: {:?}", crypto_info.1),
+		};
+
+		let call = Call::record_price(crypto_info, price);
+		T::SubmitTransaction::sign_and_submit(call, key.clone().into())
+	}
+
+	#[cfg(feature = "std")]
+	fn fetch_price_from_coincap(json: JsonValue) -> Option<Price> {
+		runtime_io::print_utf8(b"-- fetch_price_from_coincap");
+		Some(Price::new(88, 3205, None))
+	}
+
+	#[cfg(feature = "std")]
+	fn fetch_price_from_coinmarketcap(json: JsonValue) -> Option<Price> {
+		runtime_io::print_utf8(b"-- fetch_price_from_coinmarketcap");
+		Some(Price::new(103, 3205, None))
 	}
 }
 
