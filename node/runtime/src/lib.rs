@@ -64,7 +64,9 @@ pub type Hash = primitives::H256;
 /// Digest item type.
 pub type DigestItem = generic::DigestItem<Hash>;
 
+/// Our modules (two modules here)
 mod price_fetch;
+mod offchaincb;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
 /// the specifics of the runtime. They can then be made to be agnostic over specific formats
@@ -103,9 +105,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 };
 
 pub const MILLISECS_PER_BLOCK: u64 = 6000;
-
 pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
-
 pub const EPOCH_DURATION_IN_BLOCKS: u32 = 10 * MINUTES;
 
 // These time units are defined in number of blocks.
@@ -251,14 +251,37 @@ pub mod price_fetch_crypto {
 }
 
 /// We need to define the Transaction signer for that using the Key definition
-type OffchainAccount = price_fetch_crypto::Public;
-type SubmitTransaction = TransactionSubmitter<OffchainAccount, Runtime, UncheckedExtrinsic>;
+type OffchainPFAccount = price_fetch_crypto::Public;
+type SubmitPFTransaction = TransactionSubmitter<OffchainPFAccount, Runtime, UncheckedExtrinsic>;
 
 impl price_fetch::Trait for Runtime {
 	type Call = Call;
 	type Event = Event;
-	type SubmitTransaction = SubmitTransaction;
-	type KeyType = OffchainAccount;
+	type SubmitTransaction = SubmitPFTransaction;
+	type KeyType = OffchainPFAccount;
+}
+
+pub mod offchaincb_crypto {
+	pub use crate::offchaincb::KEY_TYPE;
+	use primitives::sr25519;
+	app_crypto::app_crypto!(sr25519, KEY_TYPE);
+
+	impl From<Signature> for super::Signature {
+		fn from(a: Signature) -> Self {
+			sr25519::Signature::from(a).into()
+		}
+	}
+}
+
+type OffchainCBAccount = offchaincb_crypto::Public;
+type SubmitCBTransaction = TransactionSubmitter<OffchainCBAccount, Runtime, UncheckedExtrinsic>;
+
+impl offchaincb::Trait for Runtime {
+	type Call = Call;
+	type Event = Event;
+	type SubmitTransaction = SubmitCBTransaction;
+	type SubmitUnsignedTransaction = SubmitCBTransaction;
+	type KeyType = OffchainCBAccount;
 }
 
 impl system::offchain::CreateTransaction<Runtime, UncheckedExtrinsic> for Runtime {
@@ -306,6 +329,7 @@ construct_runtime!(
 		RandomnessCollectiveFlip: randomness_collective_flip::{Module, Call, Storage},
 		// Used for the module in `./price_fetch.rs`
 		PriceFetch: price_fetch::{Module, Call, Storage, Event<T>},
+		OffchainCB: offchaincb::{Module, Call, Event<T>, Storage},
 	}
 );
 

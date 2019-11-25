@@ -183,3 +183,4 @@ std = [
     'offchain-primitives/std',
     'substrate-session/std',
 ]
+no_std = []
