@@ -11,15 +11,12 @@
 // We have to import a few things
 use rstd::prelude::*;
 use app_crypto::RuntimeAppPublic;
-use support::{decl_module, decl_storage, decl_event, dispatch::Result};
+use support::{decl_module, decl_storage, decl_event, print, dispatch::Result};
 use system::ensure_signed;
 use system::offchain::SubmitSignedTransaction;
 use codec::{Encode, Decode};
-
-#[cfg(feature = "std")]
+// #[cfg(feature = "std")]
 use simple_json::{self, json::JsonValue, parser::Parser};
-
-type StdResult<T> = core::result::Result<T, ()>;
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "std", derive(Debug))]
@@ -46,11 +43,11 @@ impl Price {
 /// the module you are actually building.
 pub const KEY_TYPE: app_crypto::KeyTypeId = app_crypto::KeyTypeId(*b"ofpf");
 
-pub const FETCHED_CRYPTOS: [(&'static [u8], &'static [u8], &'static [u8]); 1] = [
+pub const FETCHED_CRYPTOS: [(&'static [u8], &'static [u8], &'static [u8]); 2] = [
 	(b"BTC", b"coincap",
 		b"https://api.coincap.io/v2/assets/bitcoin"),
-	// (b"BTC", b"coinmarketcap",
-	// 	b"https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=2e6d8847-bcea-4999-87b1-ad452efe4e40&symbol=BTC"),
+	(b"BTC", b"coinmarketcap",
+		b"https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=2e6d8847-bcea-4999-87b1-ad452efe4e40&symbol=BTC"),
 	// (b"ETH", b"coincap",
 	// 	b"https://api.coincap.io/v2/assets/ethereum"),
 	// (b"ETH", b"coinmarketcap",
@@ -124,7 +121,7 @@ decl_module! {
 		}
 
 		pub fn record_price(origin, crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>), price: Option<Price>) -> Result {
-			runtime_io::print_utf8(b"-- record_price");
+			runtime_io::print_utf8(b"record_price: called");
 
 			// TODO: add mechanism to check origin has to be trusted (session key, etc)
 			let sender = ensure_signed(origin)?;
@@ -141,7 +138,7 @@ decl_module! {
 		}
 
 		fn offchain_worker(_block: T::BlockNumber) {
-			#[cfg(feature = "std")]
+			// #[cfg(feature = "std")]
 			for fetch_info in Self::oc_requests() {
 				// enhancement: batch the fetches together and send an array to
 				//   `http_response_wait` in one go.
@@ -154,14 +151,15 @@ decl_module! {
 }
 
 impl<T: Trait> Module<T> {
-	#[cfg(feature = "std")]
-	fn fetch_price(key: T::AccountId, crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>)) -> StdResult<()> {
+	// #[cfg(feature = "std")]
+	fn fetch_price(key: T::AccountId, crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>)) -> Result {
 		runtime_io::print_utf8(&crypto_info.0);
 		runtime_io::print_utf8(&crypto_info.1);
 		runtime_io::print_utf8(&crypto_info.2);
 		runtime_io::print_utf8(b"---");
-		let id = runtime_io::http_request_start("GET",
-			rstd::str::from_utf8(&crypto_info.2).unwrap(), &[])?;
+		let remote_url: &str = rstd::str::from_utf8(&crypto_info.2).unwrap();
+		let id = runtime_io::http_request_start("GET", remote_url, &[])
+			.map_err(|_| "http_request start error")?;
 		let _status = runtime_io::http_response_wait(&[id], None);
 
 		let mut json_result: Vec<u8> = vec![];
@@ -178,8 +176,6 @@ impl<T: Trait> Module<T> {
 		let json_obj: JsonValue = simple_json::parse_json(
 			&rstd::str::from_utf8(&json_result).unwrap()).unwrap();
 
-		runtime_io::print_utf8(b"-- finish parsing");
-
 		let price = match crypto_info.1.as_slice() {
 			src if src == b"coincap" => Self::fetch_price_from_coincap(json_obj),
 		  src if src == b"coinmarketcap" => Self::fetch_price_from_coinmarketcap(json_obj),
@@ -188,15 +184,19 @@ impl<T: Trait> Module<T> {
 
 		let call = Call::record_price(crypto_info, price);
 		T::SubmitTransaction::sign_and_submit(call, key.clone().into())
+			.map_err(|_| {
+				print("fetch_price_signing error");
+				"fetch_price_signing error"
+			})
 	}
 
-	#[cfg(feature = "std")]
+	// #[cfg(feature = "std")]
 	fn fetch_price_from_coincap(json: JsonValue) -> Option<Price> {
 		runtime_io::print_utf8(b"-- fetch_price_from_coincap");
 		Some(Price::new(88, 3205, None))
 	}
 
-	#[cfg(feature = "std")]
+	// #[cfg(feature = "std")]
 	fn fetch_price_from_coinmarketcap(json: JsonValue) -> Option<Price> {
 		runtime_io::print_utf8(b"-- fetch_price_from_coinmarketcap");
 		Some(Price::new(103, 3205, None))

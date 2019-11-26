@@ -96,8 +96,9 @@ optional = true
 version = '1.0.101'
 
 [dependencies.simple-json]
-git = 'https://github.com/jimmychu0807/simple-json'
-optional = true
+default_features = false
+git = 'https://github.com/xlc/simple-json'
+# optional = true
 version = '0.1.0'
 
 [dependencies.sr-primitives]
@@ -178,7 +179,7 @@ std = [
     'transaction-payment/std',
     'version/std',
     'serde/std',
-    'simple-json',
+    # 'simple-json',
     'safe-mix/std',
     'offchain-primitives/std',
     'substrate-session/std',
