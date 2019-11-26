@@ -5,10 +5,17 @@
 // We have to import a few things
 use rstd::prelude::*;
 use app_crypto::RuntimeAppPublic;
-use support::{decl_module, decl_event, decl_storage, StorageValue, dispatch::Result};
+use support::{decl_module, decl_event, decl_storage, print, StorageValue, dispatch::Result};
 use system::{ensure_signed, ensure_root, ensure_none};
 use system::offchain::{SubmitSignedTransaction, SubmitUnsignedTransaction};
 use codec::{Encode, Decode};
+use sr_primitives::{
+  Perbill,
+  traits::{Convert, Member, Printable, Saturating},
+  transaction_validity::{
+    TransactionValidity, TransactionLongevity, ValidTransaction, InvalidTransaction
+  }
+};
 
 pub const KEY_TYPE: app_crypto::KeyTypeId = app_crypto::KeyTypeId(*b"ofcb");
 
@@ -74,40 +81,32 @@ decl_module! {
       // It first ensures the function was signed, then it store the `Ping` request
       // with our nonce and author. Finally it results with `Ok`.
       let who = ensure_signed(origin)?;
-
-      runtime_io::print_utf8(b"-- pinging");
-
+      print("pinging");
       <Self as Store>::OcRequests::mutate(|v| v.push(OffchainRequest::Ping(nonce, who)));
       Ok(())
     }
 
     /// Called from the offchain worker to respond to a ping
-    // pub fn pong(origin, nonce: u8) -> Result {
-    //   // We don't allow anyone to `pong` but only those authorised in the `authorities`
-    //   // set at this point. Therefore after ensuring this is signed, we check whether
-    //   // that given author is allowed to `pong` is. If so, we emit the `Ack` event,
-    //   // otherwise we've just consumed their fee.
-    //   let author = ensure_signed(origin)?;
-
-    //   runtime_io::print_utf8(b"pong: called");
-
-    //   if Self::is_authority(&author) {
-    //     runtime_io::print_utf8(b"pong: is_authority");
-    //     Self::deposit_event(RawEvent::Ack(nonce, author));
-    //   }
-
-    //   Ok(())
-    // }
-
-    pub fn pong(origin, nonce: u8) -> Result {
+    pub fn pong_signed(origin, nonce: u8) -> Result {
       // We don't allow anyone to `pong` but only those authorised in the `authorities`
       // set at this point. Therefore after ensuring this is signed, we check whether
       // that given author is allowed to `pong` is. If so, we emit the `Ack` event,
       // otherwise we've just consumed their fee.
-      // let author = ensure_signed(origin)?;
-      ensure_none(origin)?;
+      let author = ensure_signed(origin)?;
 
-      runtime_io::print_utf8(b"pong: called");
+      runtime_io::print_utf8(b"pong_signed: called");
+
+      if Self::is_authority(&author) {
+        runtime_io::print_utf8(b"pong_signed: is_authority");
+        Self::deposit_event(RawEvent::Ack(nonce, author));
+      }
+
+      Ok(())
+    }
+
+    pub fn pong_unsigned(origin, nonce: u8) -> Result {
+      ensure_none(origin)?;
+      runtime_io::print_utf8(b"pong_unsigned: called");
       Self::deposit_event(RawEvent::AckNoAuthor(nonce));
       Ok(())
     }
@@ -116,14 +115,16 @@ decl_module! {
     fn offchain_worker(_now: T::BlockNumber) {
       // As `pongs` are only accepted by authorities, we only run this code,
       // if a valid local key is found, we could submit them with.
+      print("offchain_worker");
 
-      runtime_io::print_utf8(b"-- offchain_worker: entered");
-      Self::offchain();
-
-      // if let Some(key) = Self::authority_id() {
-      //   runtime_io::print_utf8(b"-- offchain_worker: calling offchain");
-      //   Self::offchain(&key);
-      // }
+      for e in <Self as Store>::OcRequests::get() {
+        if let OffchainRequest::Ping(nonce, _who) = e {
+          Self::offchain_unsigned(nonce);
+          if let Some(key) = Self::authority_id() {
+            Self::offchain_signed(&key, nonce);
+          }
+        }
+      }
     }
 
     // Simple authority management: add a new authority to the set of keys that
@@ -144,49 +145,17 @@ decl_module! {
 
 // We've moved the  helper functions outside of the main declaration for brevity.
 impl<T: Trait> Module<T> {
-
-  /// The main entry point, called with account we are supposed to sign with
-  // fn offchain(key: &T::AccountId) {
-  //   // Note, that even though this is run directly on the same block, as we are
-  //   // creating a new transaction, this will only react _in the following_ block.
-  //   runtime_io::print_utf8(b"-- `offchain` function called");
-
-  //   for e in <Self as Store>::OcRequests::get() {
-  //     match e {
-  //       OffchainRequest::Ping(nonce, _who) => {
-  //         Self::respond(key, nonce)
-  //       }
-  //       // there would be potential other calls
-  //     }
-  //   }
-  // }
-
-  fn offchain() {
-    // Note, that even though this is run directly on the same block, as we are
-    // creating a new transaction, this will only react _in the following_ block.
-    runtime_io::print_utf8(b"-- `offchain` function called");
-
-    for e in <Self as Store>::OcRequests::get() {
-      match e {
-        OffchainRequest::Ping(nonce, _who) => {
-          Self::respond(nonce)
-        }
-        // there would be potential other calls
-      }
-    }
-  }
-
   /// Responding to as the given account to a given nonce by calling `pong` as a
   /// newly signed and submitted trasnaction
-  // fn respond(key: &T::AccountId, nonce: u8) {
-  //   runtime_io::print_utf8(b"signing request to send `pong`");
-  //   let call = Call::pong(nonce);
-  //   let _ = T::SubmitTransaction::sign_and_submit(call, key.clone().into());
-  // }
+  fn offchain_signed(key: &T::AccountId, nonce: u8) {
+    print("offchain_signed");
+    let call = Call::pong_signed(nonce);
+    let _ = T::SubmitTransaction::sign_and_submit(call, key.clone().into());
+  }
 
-  fn respond(nonce: u8) {
-    runtime_io::print_utf8(b"signing request to send `pong`");
-    let call = Call::pong(nonce);
+  fn offchain_unsigned(nonce: u8) {
+    print("offchain_unsigned");
+    let call = Call::pong_unsigned(nonce);
     let _ = T::SubmitUnsignedTransaction::submit_unsigned(call);
   }
 
@@ -204,13 +173,38 @@ impl<T: Trait> Module<T> {
         |i| (*i).clone().into()
       ).collect::<Vec<T::AccountId>>();
 
+    // ASK: how can I print what's in `local_keys`?
+    // print(local_keys);
+
     Self::authorities().into_iter().find_map(|authority| {
       if local_keys.contains(&authority) {
+        print("found authority");
         Some(authority)
       } else {
+        print("authority not found");
         None
       }
     })
   }
 }
 
+impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
+  type Call = Call<T>;
+
+  fn validate_unsigned(call: &Self::Call) -> TransactionValidity {
+    if let Call::pong_unsigned(nonce) = call {
+      print("validate_unsigned: true");
+
+      return Ok(ValidTransaction {
+        priority: 0,
+        requires: vec![],
+        provides: vec![],
+        longevity: TransactionLongevity::max_value(),
+        propagate: true,
+      });
+    }
+
+    print("validate_unsigned: false");
+    InvalidTransaction::Call.into()
+  }
+}
