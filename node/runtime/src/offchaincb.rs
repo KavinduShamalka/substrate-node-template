@@ -20,7 +20,7 @@ use sr_primitives::{
 pub const KEY_TYPE: app_crypto::KeyTypeId = app_crypto::KeyTypeId(*b"ofcb");
 
 /// The module's main configuration trait.
-pub trait Trait: system::Trait  {
+pub trait Trait: timestamp::Trait + system::Trait  {
   /// The regular events type, we use to emit the `Ack`
   type Event:From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 
@@ -118,11 +118,16 @@ decl_module! {
       print("offchain_worker");
 
       for e in <Self as Store>::OcRequests::get() {
-        if let OffchainRequest::Ping(nonce, _who) = e {
-          Self::offchain_unsigned(nonce);
-          if let Some(key) = Self::authority_id() {
-            Self::offchain_signed(&key, nonce);
-          }
+        if let OffchainRequest::Ping(nonce, who) = e {
+          Self::offchain_unsigned(nonce)
+            .map_err(|err| print(err));
+
+          Self::offchain_signed(&who, nonce)
+            .map_err(|err| print(err));
+
+          // if let Some(key) = Self::authority_id() {
+          //   Self::offchain_signed(&key, nonce);
+          // }
         }
       }
     }
@@ -147,16 +152,18 @@ decl_module! {
 impl<T: Trait> Module<T> {
   /// Responding to as the given account to a given nonce by calling `pong` as a
   /// newly signed and submitted trasnaction
-  fn offchain_signed(key: &T::AccountId, nonce: u8) {
+  fn offchain_signed(key: &T::AccountId, nonce: u8) -> Result {
     print("offchain_signed");
     let call = Call::pong_signed(nonce);
-    let _ = T::SubmitTransaction::sign_and_submit(call, key.clone().into());
+    T::SubmitTransaction::sign_and_submit(call, key.clone().into())
+      .map_err(|_| "offchain_signed error")
   }
 
-  fn offchain_unsigned(nonce: u8) {
+  fn offchain_unsigned(nonce: u8) -> Result {
     print("offchain_unsigned");
     let call = Call::pong_unsigned(nonce);
-    let _ = T::SubmitUnsignedTransaction::submit_unsigned(call);
+    T::SubmitUnsignedTransaction::submit_unsigned(call)
+      .map_err(|_| "offchain_unsigned error")
   }
 
   /// Helper that confirms whether the given `AccountId` can sign `pong` transactions
@@ -195,10 +202,12 @@ impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
     if let Call::pong_unsigned(nonce) = call {
       print("validate_unsigned: true");
 
+      let now = <timestamp::Module<T>>::get();
+
       return Ok(ValidTransaction {
         priority: 0,
         requires: vec![],
-        provides: vec![],
+        provides: vec![(now).encode()],
         longevity: TransactionLongevity::max_value(),
         propagate: true,
       });

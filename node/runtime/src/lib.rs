@@ -329,7 +329,7 @@ construct_runtime!(
 		RandomnessCollectiveFlip: randomness_collective_flip::{Module, Call, Storage},
 		// Used for the module in `./price_fetch.rs`
 		PriceFetch: price_fetch::{Module, Call, Storage, Event<T>},
-		OffchainCB: offchaincb::{Module, Call, Event<T>, Storage},
+		OffchainCB: offchaincb::{Module, Call, Storage, Event<T>, ValidateUnsigned},
 	}
 );
 
