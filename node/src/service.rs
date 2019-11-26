@@ -80,6 +80,7 @@ pub fn new_full<C: Send + Default + 'static>(config: Configuration<C, GenesisCon
 	let force_authoring = config.force_authoring;
 	let name = config.name.clone();
 	let disable_grandpa = config.disable_grandpa;
+	let dev_seed = config.dev_key_seed.clone();
 
 	let (builder, mut import_setup, inherent_data_providers) = new_full_start!(config);
 
@@ -92,6 +93,18 @@ pub fn new_full<C: Send + Default + 'static>(config: Configuration<C, GenesisCon
 			Ok(Arc::new(GrandpaFinalityProofProvider::new(backend, client)) as _)
 		)?
 		.build()?;
+
+
+	// Adding dev seeds
+	if let Some(seed) = dev_seed {
+		service.keystore()
+			.write()
+			.insert_ephemeral_from_seed_by_type::<offchain_node_runtime::offchaincb_crypto::Pair>(
+				&seed,
+				offchain_node_runtime::offchaincb_crypto::KEY_TYPE,
+			)
+			.expect("Dev Seed always succeeds");
+	}
 
 	if is_authority {
 		let proposer = basic_authorship::ProposerFactory {
