@@ -115,13 +115,13 @@ decl_module! {
 		fn on_initialize(block: T::BlockNumber) {
 			<Self as Store>::OcRequests::kill();
 
-			if BLOCK_FETCH_DUR > 0 && (block.try_into().unwrap()) % BLOCK_FETCH_DUR == 0 {
+			if BLOCK_FETCH_DUR > 0 && (TryInto::<u64>::try_into(block).ok().unwrap()) % BLOCK_FETCH_DUR == 0 {
 				let _ = Self::enque_pricefetch_tasks();
 			}
 		}
 
 		pub fn kickoff_pricefetch(origin) -> Result {
-			let who = ensure_signed(origin)?;
+			let _who = ensure_signed(origin)?;
 			Self::enque_pricefetch_tasks()
 		}
 
