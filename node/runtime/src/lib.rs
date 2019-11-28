@@ -258,6 +258,7 @@ impl price_fetch::Trait for Runtime {
 	type Call = Call;
 	type Event = Event;
 	type SubmitTransaction = SubmitPFTransaction;
+	type SubmitUnsignedTransaction = SubmitPFTransaction;
 	type KeyType = OffchainPFAccount;
 }
 
@@ -328,7 +329,7 @@ construct_runtime!(
 		Sudo: sudo,
 		RandomnessCollectiveFlip: randomness_collective_flip::{Module, Call, Storage},
 		// Used for the module in `./price_fetch.rs`
-		PriceFetch: price_fetch::{Module, Call, Storage, Event<T>},
+		PriceFetch: price_fetch::{Module, Call, Storage, Event<T>, ValidateUnsigned},
 		OffchainCB: offchaincb::{Module, Call, Storage, Event<T>, ValidateUnsigned},
 	}
 );

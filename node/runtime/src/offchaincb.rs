@@ -93,6 +93,7 @@ decl_module! {
       let author = ensure_signed(origin)?;
 
       runtime_io::print_utf8(b"pong_signed: called");
+      runtime_io::print_num(nonce.into());
 
       if Self::is_authority(&author) {
         runtime_io::print_utf8(b"pong_signed: is_authority");
@@ -105,6 +106,8 @@ decl_module! {
     pub fn pong_unsigned(origin, nonce: u8) -> Result {
       ensure_none(origin)?;
       runtime_io::print_utf8(b"pong_unsigned: called");
+      runtime_io::print_num(nonce.into());
+
       Self::deposit_event(RawEvent::AckNoAuthor(nonce));
       Ok(())
     }
@@ -117,11 +120,12 @@ decl_module! {
         match e {
           OffchainRequest::Ping(nonce, who) => {
             Self::offchain_unsigned(nonce).expect("offchain_unsigned request should succeed");
-            Self::offchain_signed(&who, nonce).expect("offchain_signed request should succeed");
-
-            if let Some(key) = Self::authority_id() {
-              Self::offchain_signed(&key, nonce).expect("offchain_signed 2 request should succeed");
-            }
+            Self::offchain_unsigned(nonce + 1).expect("offchain_unsigned request should succeed");
+            Self::offchain_signed(&who, nonce + 2).expect("offchain_signed request should succeed");
+            Self::offchain_signed(&who, nonce + 3).expect("offchain_signed 2 request should succeed");
+            // if let Some(key) = Self::authority_id() {
+            //   Self::offchain_signed(&key, nonce + 3).expect("offchain_signed 2 request should succeed");
+            // }
           }
         }
       }
@@ -149,6 +153,8 @@ impl<T: Trait> Module<T> {
   /// newly signed and submitted trasnaction
   fn offchain_signed(key: &T::AccountId, nonce: u8) -> Result {
     print("offchain_signed");
+    runtime_io::print_num(nonce.into());
+
     let call = Call::pong_signed(nonce);
     T::SubmitTransaction::sign_and_submit(call, key.clone().into())
       .map_err(|_| "offchain_signed error")
@@ -156,6 +162,8 @@ impl<T: Trait> Module<T> {
 
   fn offchain_unsigned(nonce: u8) -> Result {
     print("offchain_unsigned");
+    runtime_io::print_num(nonce.into());
+
     let call = Call::pong_unsigned(nonce);
     T::SubmitUnsignedTransaction::submit_unsigned(call)
       .map_err(|_| "offchain_unsigned error")

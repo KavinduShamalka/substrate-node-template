@@ -13,9 +13,15 @@ use rstd::prelude::*;
 use app_crypto::RuntimeAppPublic;
 use support::{decl_module, decl_storage, decl_event, print, dispatch::Result};
 use system::ensure_signed;
-use system::offchain::SubmitSignedTransaction;
+use system::offchain::{SubmitSignedTransaction, SubmitUnsignedTransaction};
 use codec::{Encode, Decode};
 use simple_json::{ self, json::JsonValue };
+use core::convert::{ TryInto };
+use sr_primitives::{
+  transaction_validity::{
+    TransactionValidity, TransactionLongevity, ValidTransaction, InvalidTransaction
+  }
+};
 
 #[derive(Debug, Encode, Decode, Clone, PartialEq, Eq)]
 pub struct Price {
@@ -41,6 +47,10 @@ impl Price {
 /// the module you are actually building.
 pub const KEY_TYPE: app_crypto::KeyTypeId = app_crypto::KeyTypeId(*b"ofpf");
 
+// This automates price fetching every certain blocks. Set to 0 disable this feature.
+//   Then you need to manucally kickoff pricefetch
+pub const BLOCK_FETCH_DUR: u64 = 5;
+
 pub const FETCHED_CRYPTOS: [(&'static [u8], &'static [u8], &'static [u8]); 2] = [
 	(b"BTC", b"coincap",
 		b"https://api.coincap.io/v2/assets/bitcoin"),
@@ -63,6 +73,7 @@ pub trait Trait: timestamp::Trait + system::Trait {
 
 	/// Let's define the helper we use to create signed transactions with
 	type SubmitTransaction: SubmitSignedTransaction<Self, <Self as Trait>::Call>;
+  type SubmitUnsignedTransaction: SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
 
 	/// The local keytype
 	type KeyType: RuntimeAppPublic + From<Self::AccountId> + Into<Self::AccountId> + Clone;
@@ -71,9 +82,9 @@ pub trait Trait: timestamp::Trait + system::Trait {
 /// The type of requests we can send to the offchain worker
 #[cfg_attr(feature = "std", derive(PartialEq, Debug))]
 #[derive(Encode, Decode)]
-pub enum OffchainRequest<T: system::Trait> {
+pub enum OffchainRequest {
 	/// If an authorised offchain worker sees this, will kick off to work
-	PriceFetch(<T as system::Trait>::AccountId, (Vec<u8>, Vec<u8>, Vec<u8>))
+	PriceFetch(Vec<u8>, Vec<u8>, Vec<u8>)
 }
 
 decl_event!(
@@ -87,7 +98,7 @@ decl_event!(
 // This module's storage items.
 decl_storage! {
 	trait Store for Module<T: Trait> as PriceFetch {
-		pub OcRequests get(oc_requests): Vec<OffchainRequest<T>>;
+		pub OcRequests get(oc_requests): Vec<OffchainRequest>;
 		pub PricePoints: map (Vec<u8>, Vec<u8>) => Vec<(T::Moment, Option<Price>)>;
 	}
 }
@@ -101,22 +112,17 @@ decl_module! {
 		fn deposit_event() = default;
 
 		// Clean the state on initialization of the block
-		fn on_initialize(_block: T::BlockNumber) {
+		fn on_initialize(block: T::BlockNumber) {
 			<Self as Store>::OcRequests::kill();
+
+			if BLOCK_FETCH_DUR > 0 && (block.try_into().unwrap()) % BLOCK_FETCH_DUR == 0 {
+				let _ = Self::enque_pricefetch_tasks();
+			}
 		}
 
 		pub fn kickoff_pricefetch(origin) -> Result {
 			let who = ensure_signed(origin)?;
-
-			for cyrpto_info in FETCHED_CRYPTOS.iter() {
-				<Self as Store>::OcRequests::mutate(|v|
-					v.push(OffchainRequest::PriceFetch(
-						who.clone(),
-						(cyrpto_info.0.to_vec(), cyrpto_info.1.to_vec(), cyrpto_info.2.to_vec())
-					))
-				);
-			}
-			Ok(())
+			Self::enque_pricefetch_tasks()
 		}
 
 		pub fn record_price(_origin, crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>), price: Option<Price>) -> Result {
@@ -144,26 +150,37 @@ decl_module! {
 			for fetch_info in Self::oc_requests() {
 				// enhancement: batch the fetches together and send an array to
 				//   `http_response_wait` in one go.
-				let _ = match fetch_info {
-					OffchainRequest::PriceFetch(who, crypto_info) => Self::fetch_price(who, crypto_info)
-				}.map_err(|err| {
-					// toAsk: how to print a better error message here?
-					print(err);
-					()
-				});
+				let res = match fetch_info {
+					OffchainRequest::PriceFetch(sym, remote_src, remote_url) =>
+						Self::fetch_price(sym, remote_src, remote_url)
+				};
+
+				if let Err(err_msg) = res {
+					print(err_msg);
+				}
 			}
 		} // end of `fn offchain_worker`
+
 	}
 }
 
 impl<T: Trait> Module<T> {
-	fn fetch_price(key: T::AccountId, crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>)) -> Result {
-		runtime_io::print_utf8(&crypto_info.0);
-		runtime_io::print_utf8(&crypto_info.1);
-		runtime_io::print_utf8(&crypto_info.2);
+	fn enque_pricefetch_tasks() -> Result {
+		for crypto_info in FETCHED_CRYPTOS.iter() {
+			<Self as Store>::OcRequests::mutate(|v|
+				v.push(OffchainRequest::PriceFetch(crypto_info.0.to_vec(),
+					crypto_info.1.to_vec(), crypto_info.2.to_vec()))
+			);
+		}
+		Ok(())
+	}
+
+	fn fetch_price(sym: Vec<u8>, remote_src: Vec<u8>, remote_url: Vec<u8>) -> Result {
+		runtime_io::print_utf8(&sym);
+		runtime_io::print_utf8(&remote_src);
 		runtime_io::print_utf8(b"---");
-		let remote_url: &str = rstd::str::from_utf8(&crypto_info.2).unwrap();
-		let id = runtime_io::http_request_start("GET", remote_url, &[])
+		let remote_url_str: &str = rstd::str::from_utf8(&remote_url).unwrap();
+		let id = runtime_io::http_request_start("GET", remote_url_str, &[])
 			.map_err(|_| "http_request start error")?;
 		let _ = runtime_io::http_response_wait(&[id], None);
 
@@ -182,15 +199,15 @@ impl<T: Trait> Module<T> {
 			&rstd::str::from_utf8(&json_result).unwrap())
 			.map_err(|_| "JSON parsing error")?;
 
-		let price = match crypto_info.1.as_slice() {
+		let price = match remote_src.as_slice() {
 			src if src == b"coincap" => Self::fetch_price_from_coincap(json_obj),
 		  src if src == b"coinmarketcap" => Self::fetch_price_from_coinmarketcap(json_obj),
 		  _ => return Err("Unknown remote source"),
 		};
 
-		let call = Call::record_price(crypto_info, price);
-		T::SubmitTransaction::sign_and_submit(call, key.clone().into())
-			.map_err(|_| "fetch_price_signing error")
+		let call = Call::record_price((sym, remote_src, remote_url), price);
+		T::SubmitUnsignedTransaction::submit_unsigned(call)
+			.map_err(|_| "submit_unsigned_call in fetch_price error")
 	}
 
 	fn fetch_price_from_coincap(_json: JsonValue) -> Option<Price> {
@@ -202,6 +219,24 @@ impl<T: Trait> Module<T> {
 		runtime_io::print_utf8(b"-- fetch_price_from_coinmarketcap");
 		Some(Price::new(103, 3205, None))
 	}
+}
+
+impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
+  type Call = Call<T>;
+
+  fn validate_unsigned(call: &Self::Call) -> TransactionValidity {
+    if let Call::record_price(crypto_info, price) = call {
+    	print("validate_unsigned: true");
+      return Ok(ValidTransaction {
+        priority: 0,
+        requires: vec![],
+        provides: vec![(crypto_info, price).encode()],
+        longevity: TransactionLongevity::max_value(),
+        propagate: true,
+      });
+    }
+    InvalidTransaction::Call.into()
+  }
 }
 
 /// tests for this module
