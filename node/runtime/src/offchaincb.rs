@@ -10,8 +10,6 @@ use system::{ensure_signed, ensure_root, ensure_none};
 use system::offchain::{SubmitSignedTransaction, SubmitUnsignedTransaction};
 use codec::{Encode, Decode};
 use sr_primitives::{
-  Perbill,
-  traits::{Convert, Member, Printable, Saturating},
   transaction_validity::{
     TransactionValidity, TransactionLongevity, ValidTransaction, InvalidTransaction
   }
@@ -115,19 +113,16 @@ decl_module! {
     fn offchain_worker(_now: T::BlockNumber) {
       // As `pongs` are only accepted by authorities, we only run this code,
       // if a valid local key is found, we could submit them with.
-      print("offchain_worker");
-
       for e in <Self as Store>::OcRequests::get() {
-        if let OffchainRequest::Ping(nonce, who) = e {
-          Self::offchain_unsigned(nonce)
-            .map_err(|err| print(err));
+        match e {
+          OffchainRequest::Ping(nonce, who) => {
+            Self::offchain_unsigned(nonce).expect("offchain_unsigned request should succeed");
+            Self::offchain_signed(&who, nonce).expect("offchain_signed request should succeed");
 
-          Self::offchain_signed(&who, nonce)
-            .map_err(|err| print(err));
-
-          // if let Some(key) = Self::authority_id() {
-          //   Self::offchain_signed(&key, nonce);
-          // }
+            if let Some(key) = Self::authority_id() {
+              Self::offchain_signed(&key, nonce).expect("offchain_signed 2 request should succeed");
+            }
+          }
         }
       }
     }
@@ -207,7 +202,7 @@ impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
       return Ok(ValidTransaction {
         priority: 0,
         requires: vec![],
-        provides: vec![(now).encode()],
+        provides: vec![(nonce, now).encode()],
         longevity: TransactionLongevity::max_value(),
         propagate: true,
       });

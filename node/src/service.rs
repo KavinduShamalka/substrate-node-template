@@ -95,15 +95,24 @@ pub fn new_full<C: Send + Default + 'static>(config: Configuration<C, GenesisCon
 		.build()?;
 
 
-	// Adding dev seeds
+	// Adding dev seeds, needed for signing offchain txs w. dev account
 	if let Some(seed) = dev_seed {
+		// adding to `offchaincb` runtime
 		service.keystore()
 			.write()
 			.insert_ephemeral_from_seed_by_type::<offchain_node_runtime::offchaincb_crypto::Pair>(
 				&seed,
 				offchain_node_runtime::offchaincb_crypto::KEY_TYPE,
 			)
-			.expect("Dev Seed always succeeds");
+			.expect("Dev seed should always succeeds");
+
+		service.keystore()
+			.write()
+			.insert_ephemeral_from_seed_by_type::<offchain_node_runtime::price_fetch_crypto::Pair>(
+				&seed,
+				offchain_node_runtime::price_fetch_crypto::KEY_TYPE,
+			)
+			.expect("Dev Seed should always succeeds");
 	}
 
 	if is_authority {

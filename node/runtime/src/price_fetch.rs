@@ -15,11 +15,9 @@ use support::{decl_module, decl_storage, decl_event, print, dispatch::Result};
 use system::ensure_signed;
 use system::offchain::SubmitSignedTransaction;
 use codec::{Encode, Decode};
-// #[cfg(feature = "std")]
-use simple_json::{self, json::JsonValue, parser::Parser};
+use simple_json::{ self, json::JsonValue };
 
-#[derive(Encode, Decode, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "std", derive(Debug))]
+#[derive(Debug, Encode, Decode, Clone, PartialEq, Eq)]
 pub struct Price {
 	dollars: u32,
 	cents: u32, // up to 4 digits
@@ -81,6 +79,7 @@ pub enum OffchainRequest<T: system::Trait> {
 decl_event!(
 	pub enum Event<T> where
 		Moment = <T as timestamp::Trait>::Moment {
+
 		PriceFetched(Vec<u8>, Vec<u8>, Moment, Option<Price>),
 	}
 );
@@ -120,38 +119,44 @@ decl_module! {
 			Ok(())
 		}
 
-		pub fn record_price(origin, crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>), price: Option<Price>) -> Result {
-			runtime_io::print_utf8(b"record_price: called");
-
-			// TODO: add mechanism to check origin has to be trusted (session key, etc)
-			let sender = ensure_signed(origin)?;
-
-			let (symbol, source) = (crypto_info.0, crypto_info.1);
+		pub fn record_price(_origin, crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>), price: Option<Price>) -> Result {
+			let (symbol, remote_src) = (crypto_info.0, crypto_info.1);
 			let now = <timestamp::Module<T>>::get();
+
+			runtime_io::print_utf8(b"record_price: called");
+			runtime_io::print_utf8(&symbol);
+			runtime_io::print_utf8(&remote_src);
+
+			runtime_io::print_num(price.as_ref().unwrap().dollars.into());
+			runtime_io::print_num(price.as_ref().unwrap().cents.into());
 
 			// Spit out an event and Add to storage
 			Self::deposit_event(RawEvent::PriceFetched(
-				symbol.clone(), source.clone(), now.clone(), price.clone()));
+				symbol.clone(), remote_src.clone(), now.clone(), price.clone()));
+
 			let price_pt = (now, price);
-			<PricePoints<T>>::mutate((symbol, source), |vec| vec.push(price_pt));
+			<PricePoints<T>>::mutate((symbol, remote_src), |vec| vec.push(price_pt));
+
 			Ok(())
 		}
 
 		fn offchain_worker(_block: T::BlockNumber) {
-			// #[cfg(feature = "std")]
 			for fetch_info in Self::oc_requests() {
 				// enhancement: batch the fetches together and send an array to
 				//   `http_response_wait` in one go.
 				let _ = match fetch_info {
 					OffchainRequest::PriceFetch(who, crypto_info) => Self::fetch_price(who, crypto_info)
-				};
+				}.map_err(|err| {
+					// toAsk: how to print a better error message here?
+					print(err);
+					()
+				});
 			}
 		} // end of `fn offchain_worker`
 	}
 }
 
 impl<T: Trait> Module<T> {
-	// #[cfg(feature = "std")]
 	fn fetch_price(key: T::AccountId, crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>)) -> Result {
 		runtime_io::print_utf8(&crypto_info.0);
 		runtime_io::print_utf8(&crypto_info.1);
@@ -160,7 +165,7 @@ impl<T: Trait> Module<T> {
 		let remote_url: &str = rstd::str::from_utf8(&crypto_info.2).unwrap();
 		let id = runtime_io::http_request_start("GET", remote_url, &[])
 			.map_err(|_| "http_request start error")?;
-		let _status = runtime_io::http_response_wait(&[id], None);
+		let _ = runtime_io::http_response_wait(&[id], None);
 
 		let mut json_result: Vec<u8> = vec![];
 		loop {
@@ -170,34 +175,30 @@ impl<T: Trait> Module<T> {
 			if _read == Ok(0) { break }
 		}
 
-		// Print the whole JSON blob
+		// Print out the whole JSON blob
 		runtime_io::print_utf8(&json_result);
 
 		let json_obj: JsonValue = simple_json::parse_json(
-			&rstd::str::from_utf8(&json_result).unwrap()).unwrap();
+			&rstd::str::from_utf8(&json_result).unwrap())
+			.map_err(|_| "JSON parsing error")?;
 
 		let price = match crypto_info.1.as_slice() {
 			src if src == b"coincap" => Self::fetch_price_from_coincap(json_obj),
 		  src if src == b"coinmarketcap" => Self::fetch_price_from_coinmarketcap(json_obj),
-		  _ => panic!("unknown source: {:?}", crypto_info.1),
+		  _ => return Err("Unknown remote source"),
 		};
 
 		let call = Call::record_price(crypto_info, price);
 		T::SubmitTransaction::sign_and_submit(call, key.clone().into())
-			.map_err(|_| {
-				print("fetch_price_signing error");
-				"fetch_price_signing error"
-			})
+			.map_err(|_| "fetch_price_signing error")
 	}
 
-	// #[cfg(feature = "std")]
-	fn fetch_price_from_coincap(json: JsonValue) -> Option<Price> {
+	fn fetch_price_from_coincap(_json: JsonValue) -> Option<Price> {
 		runtime_io::print_utf8(b"-- fetch_price_from_coincap");
 		Some(Price::new(88, 3205, None))
 	}
 
-	// #[cfg(feature = "std")]
-	fn fetch_price_from_coinmarketcap(json: JsonValue) -> Option<Price> {
+	fn fetch_price_from_coinmarketcap(_json: JsonValue) -> Option<Price> {
 		runtime_io::print_utf8(b"-- fetch_price_from_coinmarketcap");
 		Some(Price::new(103, 3205, None))
 	}
