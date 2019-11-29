@@ -123,6 +123,9 @@ decl_module! {
             Self::offchain_unsigned(nonce + 1).expect("offchain_unsigned request should succeed");
             Self::offchain_signed(&who, nonce + 2).expect("offchain_signed request should succeed");
             Self::offchain_signed(&who, nonce + 3).expect("offchain_signed 2 request should succeed");
+
+            // to tame the warning message
+            let _ = Self::authority_id();
             // if let Some(key) = Self::authority_id() {
             //   Self::offchain_signed(&key, nonce + 3).expect("offchain_signed 2 request should succeed");
             // }

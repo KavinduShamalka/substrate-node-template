@@ -51,16 +51,18 @@ pub const KEY_TYPE: app_crypto::KeyTypeId = app_crypto::KeyTypeId(*b"ofpf");
 //   Then you need to manucally kickoff pricefetch
 pub const BLOCK_FETCH_DUR: u64 = 5;
 
-pub const FETCHED_CRYPTOS: [(&'static [u8], &'static [u8], &'static [u8]); 2] = [
+pub const FETCHED_CRYPTOS: [(&'static [u8], &'static [u8], &'static [u8]); 1] = [
 	(b"BTC", b"coincap",
 		b"https://api.coincap.io/v2/assets/bitcoin"),
-	(b"BTC", b"coinmarketcap",
-		b"https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=2e6d8847-bcea-4999-87b1-ad452efe4e40&symbol=BTC"),
+	// (b"BTC", b"coinmarketcap",
+	// 	b"https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=2e6d8847-bcea-4999-87b1-ad452efe4e40&symbol=BTC"),
 	// (b"ETH", b"coincap",
 	// 	b"https://api.coincap.io/v2/assets/ethereum"),
 	// (b"ETH", b"coinmarketcap",
 	// 	b"https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=2e6d8847-bcea-4999-87b1-ad452efe4e40&symbol=ETH"),
 ];
+
+pub type StdResult<T> = core::result::Result<T, &'static str>;
 
 /// The module's configuration trait.
 pub trait Trait: timestamp::Trait + system::Trait {
@@ -91,15 +93,25 @@ decl_event!(
 	pub enum Event<T> where
 		Moment = <T as timestamp::Trait>::Moment {
 
-		PriceFetched(Vec<u8>, Vec<u8>, Moment, Option<Price>),
+		PriceFetched(Vec<u8>, Vec<u8>, Moment, Price),
 	}
 );
 
 // This module's storage items.
 decl_storage! {
 	trait Store for Module<T: Trait> as PriceFetch {
+		// storage about offchain worker tasks
 		pub OcRequests get(oc_requests): Vec<OffchainRequest>;
-		pub PricePoints: map (Vec<u8>, Vec<u8>) => Vec<(T::Moment, Option<Price>)>;
+
+		// storage about source price points
+		pub SrcPricePoints get(src_price_pts): Vec<(T::Moment, Price)>;
+		pub TokenSrcPPMap: map Vec<u8> => Vec<u64>;
+		pub RemoteSrcPPMap: map Vec<u8> => Vec<u64>;
+
+		// storage about aggregated price points (calculated in our logic)
+		pub AggPricePoints get(agg_price_pts): Vec<(T::Moment, Price)>;
+		pub AggPPDependencies: map Vec<u8> => Vec<u64>;
+		pub TokenAggPPMap: map Vec<u8> => Vec<u64>;
 	}
 }
 
@@ -125,24 +137,32 @@ decl_module! {
 			Self::enque_pricefetch_tasks()
 		}
 
-		pub fn record_price(_origin, crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>), price: Option<Price>) -> Result {
+		pub fn record_price(_origin, crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>), price: Price) -> Result {
 			let (symbol, remote_src) = (crypto_info.0, crypto_info.1);
 			let now = <timestamp::Module<T>>::get();
 
+			// Debug printout
 			runtime_io::print_utf8(b"record_price: called");
 			runtime_io::print_utf8(&symbol);
 			runtime_io::print_utf8(&remote_src);
-
-			runtime_io::print_num(price.as_ref().unwrap().dollars.into());
-			runtime_io::print_num(price.as_ref().unwrap().cents.into());
+			runtime_io::print_num(price.dollars.into());
+			runtime_io::print_num(price.cents.into());
 
 			// Spit out an event and Add to storage
 			Self::deposit_event(RawEvent::PriceFetched(
 				symbol.clone(), remote_src.clone(), now.clone(), price.clone()));
 
 			let price_pt = (now, price);
-			<PricePoints<T>>::mutate((symbol, remote_src), |vec| vec.push(price_pt));
+			<SrcPricePoints<T>>::mutate(|vec| vec.push(price_pt));
+			// The index serves as the ID
+			let pp_id: u64 = Self::src_price_pts().len().try_into().unwrap();
+			<TokenSrcPPMap>::mutate(symbol, |token_vec| token_vec.push(pp_id));
+			<RemoteSrcPPMap>::mutate(remote_src, |rs_vec| rs_vec.push(pp_id));
 
+			Ok(())
+		}
+
+		pub fn aggregate_price_points(_origin) -> Result {
 			Ok(())
 		}
 
@@ -155,10 +175,14 @@ decl_module! {
 						Self::fetch_price(sym, remote_src, remote_url)
 				};
 
-				if let Err(err_msg) = res {
-					print(err_msg);
-				}
+				if let Err(err_msg) = res { print(err_msg) }
 			}
+
+			// submit a call back onchain to aggregate price
+			let call = Call::aggregate_price_points();
+			let _ = T::SubmitUnsignedTransaction::submit_unsigned(call)
+				.map_err(|_| "aggregate_price_points: submit_unsigned_call error");
+
 		} // end of `fn offchain_worker`
 
 	}
@@ -175,12 +199,8 @@ impl<T: Trait> Module<T> {
 		Ok(())
 	}
 
-	fn fetch_price(sym: Vec<u8>, remote_src: Vec<u8>, remote_url: Vec<u8>) -> Result {
-		runtime_io::print_utf8(&sym);
-		runtime_io::print_utf8(&remote_src);
-		runtime_io::print_utf8(b"---");
-		let remote_url_str: &str = rstd::str::from_utf8(&remote_url).unwrap();
-		let id = runtime_io::http_request_start("GET", remote_url_str, &[])
+	fn fetch_json(remote_url: &str) -> StdResult<JsonValue> {
+		let id = runtime_io::http_request_start("GET", remote_url, &[])
 			.map_err(|_| "http_request start error")?;
 		let _ = runtime_io::http_response_wait(&[id], None);
 
@@ -195,29 +215,41 @@ impl<T: Trait> Module<T> {
 		// Print out the whole JSON blob
 		runtime_io::print_utf8(&json_result);
 
-		let json_obj: JsonValue = simple_json::parse_json(
+		let json_val: JsonValue = simple_json::parse_json(
 			&rstd::str::from_utf8(&json_result).unwrap())
 			.map_err(|_| "JSON parsing error")?;
 
+		Ok(json_val)
+	}
+
+	fn fetch_price(sym: Vec<u8>, remote_src: Vec<u8>, remote_url: Vec<u8>) -> Result {
+		runtime_io::print_utf8(&sym);
+		runtime_io::print_utf8(&remote_src);
+		runtime_io::print_utf8(b"---");
+
+		let json = Self::fetch_json(rstd::str::from_utf8(&remote_url).unwrap())?;
+
 		let price = match remote_src.as_slice() {
-			src if src == b"coincap" => Self::fetch_price_from_coincap(json_obj),
-		  src if src == b"coinmarketcap" => Self::fetch_price_from_coinmarketcap(json_obj),
+			src if src == b"coincap" => Self::fetch_price_from_coincap(json)
+				.map_err(|_| "fetch_price_from_coincap error")?,
+		  src if src == b"coinmarketcap" => Self::fetch_price_from_coinmarketcap(json)
+		  	.map_err(|_| "fetch_price_from_coinmarketcap error")?,
 		  _ => return Err("Unknown remote source"),
 		};
 
 		let call = Call::record_price((sym, remote_src, remote_url), price);
 		T::SubmitUnsignedTransaction::submit_unsigned(call)
-			.map_err(|_| "submit_unsigned_call in fetch_price error")
+			.map_err(|_| "fetch_price: submit_unsigned_call error")
 	}
 
-	fn fetch_price_from_coincap(_json: JsonValue) -> Option<Price> {
+	fn fetch_price_from_coincap(_json: JsonValue) -> StdResult<Price> {
 		runtime_io::print_utf8(b"-- fetch_price_from_coincap");
-		Some(Price::new(88, 3205, None))
+		Ok(Price::new(100, 3500, None))
 	}
 
-	fn fetch_price_from_coinmarketcap(_json: JsonValue) -> Option<Price> {
+	fn fetch_price_from_coinmarketcap(_json: JsonValue) -> StdResult<Price> {
 		runtime_io::print_utf8(b"-- fetch_price_from_coinmarketcap");
-		Some(Price::new(103, 3205, None))
+		Ok(Price::new(200, 5000, None))
 	}
 }
 
@@ -225,17 +257,24 @@ impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
   type Call = Call<T>;
 
   fn validate_unsigned(call: &Self::Call) -> TransactionValidity {
-    if let Call::record_price(crypto_info, price) = call {
-    	print("validate_unsigned: true");
-      return Ok(ValidTransaction {
+		let now = <timestamp::Module<T>>::get();
+  	match call {
+  		Call::record_price(crypto_info, price) =>	Ok(ValidTransaction {
         priority: 0,
         requires: vec![],
         provides: vec![(crypto_info, price).encode()],
         longevity: TransactionLongevity::max_value(),
         propagate: true,
-      });
-    }
-    InvalidTransaction::Call.into()
+  		}),
+  		Call::aggregate_price_points() => Ok(ValidTransaction {
+        priority: 0,
+        requires: vec![],
+        provides: vec![(now).encode()],
+        longevity: TransactionLongevity::max_value(),
+        propagate: true,
+  		}),
+  		_ => InvalidTransaction::Call.into()
+  	}
   }
 }
 
