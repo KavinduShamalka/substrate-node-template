@@ -167,23 +167,26 @@ decl_module! {
       Ok(())
     }
 
-    pub fn record_agg_pp(_origin, pp_map: BTreeMap<Vec<u8>, Price>) -> Result {
+    pub fn record_agg_pp(_origin, sym: Vec<u8>, price: Price) -> Result {
       // Debug printout
       runtime_io::print_utf8(b"record_agg_pp: called");
+      runtime_io::print_utf8(&sym);
+      runtime_io::print_num(price.dollars.into());
+      runtime_io::print_num(price.cents.into());
 
       let now = <timestamp::Module<T>>::get();
-      // Turn off the flag
+      // Turn off the flag for request has been handled
       <UpdateAggPP>::mutate(|flag| *flag = false);
 
-      pp_map.iter().for_each(|(sym, price)| {
-        Self::deposit_event(RawEvent::AggregatedPrice(
-          sym.clone(), now.clone(), price.clone()));
+      // Spit the event
+      Self::deposit_event(RawEvent::AggregatedPrice(
+        sym.clone(), now.clone(), price.clone()));
 
-        let price_pt = (now.clone(), price.clone());
-        <AggPricePoints<T>>::mutate(|vec| vec.push(price_pt));
-        let pp_id: u64 = Self::agg_price_pts().len().try_into().unwrap();
-        <TokenAggPPMap>::mutate(sym, |vec| vec.push(pp_id));
-      });
+      // Record in the storage
+      let price_pt = (now.clone(), price.clone());
+      <AggPricePoints<T>>::mutate(|vec| vec.push(price_pt));
+      let pp_id: u64 = Self::agg_price_pts().len().try_into().unwrap();
+      <TokenAggPPMap>::mutate(sym, |vec| vec.push(pp_id));
 
       Ok(())
     }
@@ -281,9 +284,13 @@ impl<T: Trait> Module<T> {
     // TODO: calculate the map of sym -> pp
     pp_map.insert(b"BTC".to_vec(), Price::new(100, 3500, None));
 
-    let call = Call::record_agg_pp(pp_map);
-    T::SubmitUnsignedTransaction::submit_unsigned(call)
-      .map_err(|_| "aggregate_pp: submit_unsigned_call error")
+    pp_map.iter().for_each(|(sym, price)| {
+      let call = Call::record_agg_pp(sym.clone(), price.clone());
+      if let Err(_) = T::SubmitUnsignedTransaction::submit_unsigned(call) {
+        print("aggregate_pp: submit_unsigned_call error");
+      }
+    });
+    Ok(())
   }
 }
 
@@ -291,18 +298,20 @@ impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
   type Call = Call<T>;
 
   fn validate_unsigned(call: &Self::Call) -> TransactionValidity {
+    let now = <timestamp::Module<T>>::get();
+
     match call {
-      Call::record_price(crypto_info, price) => Ok(ValidTransaction {
+      Call::record_price(..) => Ok(ValidTransaction {
         priority: 0,
         requires: vec![],
-        provides: vec![(crypto_info, price).encode()],
+        provides: vec![(now).encode()],
         longevity: TransactionLongevity::max_value(),
         propagate: true,
       }),
-      Call::record_agg_pp(pp_map) => Ok(ValidTransaction {
+      Call::record_agg_pp(..) => Ok(ValidTransaction {
         priority: 0,
         requires: vec![],
-        provides: vec![(pp_map).encode()],
+        provides: vec![(now).encode()],
         longevity: TransactionLongevity::max_value(),
         propagate: true,
       }),
