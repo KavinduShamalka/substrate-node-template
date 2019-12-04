@@ -3,11 +3,11 @@ EXE_FLAG = ARGV[0];
 BINARY="offchain-node";
 RUNTIME="offchain-node-runtime";
 
-if (EXE_FLAG == "check")
-  system("cargo check --release -p #{RUNTIME}")
-elsif (EXE_FLAG == "build")
-  system("cargo build --release")
+if (EXE_FLAG == "build")
+  # This cmd runs in local dev env
+  system("cargo remote -- build --release")
 elsif (EXE_FLAG == "clean")
+  # The following two cmds run in remote dev env
   system("./target/release/#{BINARY} purge-chain --dev && ./target/release/#{BINARY} --dev");
 else
   system("./target/release/#{BINARY} --dev");

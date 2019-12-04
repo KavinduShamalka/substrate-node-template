@@ -8,9 +8,9 @@ mod chain_spec;
 mod service;
 mod cli;
 
-pub use substrate_cli::{VersionInfo, IntoExit, error};
+pub use sc_cli::{VersionInfo, IntoExit, error};
 
-fn main() {
+fn main() -> Result<(), cli::error::Error> {
 	let version = VersionInfo {
 		name: "Offchain Worker - Price Fetch",
 		commit: env!("VERGEN_SHA_SHORT"),
@@ -18,11 +18,8 @@ fn main() {
 		executable_name: "offchain-pricefetch",
 		author: "Jimmy Chu",
 		description: "Offchain Worker - Price Fetch",
-		support_url: "https://substrate.dev/",
+		support_url: "https://github.com/jimmychu0807/substrate-offchain-pricefetch",
 	};
 
-	if let Err(e) = cli::run(::std::env::args(), cli::Exit, version) {
-		eprintln!("Fatal error: {}\n\n{:?}", e, e);
-		std::process::exit(1)
-	}
+	cli::run(std::env::args(), cli::Exit, version)
 }

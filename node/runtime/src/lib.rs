@@ -10,19 +10,17 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use rstd::prelude::*;
 use primitives::{OpaqueMetadata, crypto::key_types};
-use sr_primitives::{
-	ApplyResult, transaction_validity::TransactionValidity, generic, create_runtime_str,
-	impl_opaque_keys, AnySignature
+use sp_runtime::{
+	ApplyExtrinsicResult, transaction_validity::TransactionValidity, generic, create_runtime_str,
+	impl_opaque_keys, MultiSignature
 };
-use sr_primitives::traits::{NumberFor, BlakeTwo256, Block as BlockT, StaticLookup, Verify,
-	ConvertInto, SaturatedConversion};
-use sr_primitives::weights::Weight;
-use client::{
-	block_builder::api::{CheckInherentsResult, InherentData, self as block_builder_api},
-	runtime_api as client_api, impl_runtime_apis
+use sp_primitives::weights::Weight;
+use sp_runtime::traits::{
+	NumberFor, BlakeTwo256, Block as BlockT, StaticLookup, Verify, ConvertInto, IdentifyAccount
 };
+use sp_api::impl_runtime_apis;
 use aura_primitives::sr25519::AuthorityId as AuraId;
-use grandpa::{AuthorityId as GrandpaId, AuthorityWeight as GrandpaWeight};
+use grandpa::AuthorityList as GrandpaAuthorityList;
 use grandpa::fg_primitives;
 use version::RuntimeVersion;
 #[cfg(feature = "std")]
@@ -30,11 +28,15 @@ use version::NativeVersion;
 
 // A few exports that help ease life for downstream crates.
 #[cfg(any(feature = "std", test))]
-pub use sr_primitives::BuildStorage;
+pub use sp_runtime::BuildStorage;
 pub use timestamp::Call as TimestampCall;
 pub use balances::Call as BalancesCall;
-pub use sr_primitives::{Permill, Perbill};
-pub use support::{StorageValue, construct_runtime, parameter_types, traits::Randomness};
+pub use sp_runtime::{Permill, Perbill};
+pub use support::{
+	StorageValue, construct_runtime, parameter_types,
+	traits::Randomness,
+	weights::Weight,
+};
 /// Additionally, we need `system` here
 use system::offchain::TransactionSubmitter;
 
@@ -42,11 +44,11 @@ use system::offchain::TransactionSubmitter;
 pub type BlockNumber = u32;
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
-pub type Signature = AnySignature;
+pub type Signature = MultiSignature;
 
 /// Some way of identifying an account on the chain. We intentionally make it equivalent
 /// to the public key of our transaction signing scheme.
-pub type AccountId = <Signature as Verify>::Signer;
+pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
 
 /// The type for looking up accounts. We don't expect more than 4 billion of them, but you
 /// never know...
@@ -75,7 +77,7 @@ mod offchaincb;
 pub mod opaque {
 	use super::*;
 
-	pub use sr_primitives::OpaqueExtrinsic as UncheckedExtrinsic;
+	pub use sp_runtime::OpaqueExtrinsic as UncheckedExtrinsic;
 
 	/// Opaque block header type.
 	pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
@@ -86,35 +88,30 @@ pub mod opaque {
 
 	impl_opaque_keys! {
 		pub struct SessionKeys {
-			#[id(key_types::AURA)]
-			pub aura: AuraId,
-			#[id(key_types::GRANDPA)]
-			pub grandpa: GrandpaId,
+			pub aura: Aura,
+			pub grandpa: Grandpa,
 		}
 	}
 }
 
 /// This runtime version.
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-	spec_name: create_runtime_str!("price-fetch"),
-	impl_name: create_runtime_str!("price-fetch"),
-	authoring_version: 3,
-	spec_version: 4,
-	impl_version: 4,
+	spec_name: create_runtime_str!("offchain-worker"),
+	impl_name: create_runtime_str!("offchain-worker"),
+	authoring_version: 1,
+	spec_version: 1,
+	impl_version: 1,
 	apis: RUNTIME_API_VERSIONS,
 };
 
 pub const MILLISECS_PER_BLOCK: u64 = 6000;
+
 pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
-pub const EPOCH_DURATION_IN_BLOCKS: u32 = 10 * MINUTES;
 
 // These time units are defined in number of blocks.
 pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
 pub const HOURS: BlockNumber = MINUTES * 60;
 pub const DAYS: BlockNumber = HOURS * 24;
-
-// 1 in 4 blocks (on average, not counting collisions) will be primary babe blocks.
-pub const PRIMARY_PROBABILITY: (u64, u64) = (1, 4);
 
 /// The version infromation used to identify this runtime when compiled natively.
 #[cfg(feature = "std")]
@@ -177,7 +174,7 @@ impl grandpa::Trait for Runtime {
 impl indices::Trait for Runtime {
 	/// The type for recording indexing into the account enumeration. If this ever overflows, there
 	/// will be problems!
-	type AccountIndex = u32;
+	type AccountIndex = AccountIndex;
 	/// Use the standard means of resolving an index hint from an id.
 	type ResolveHint = indices::SimpleResolveHint<Self::AccountId, Self::AccountIndex>;
 	/// Determine whether an account is dead.
@@ -323,12 +320,12 @@ construct_runtime!(
 		Timestamp: timestamp::{Module, Call, Storage, Inherent},
 		Aura: aura::{Module, Config<T>, Inherent(Timestamp)},
 		Grandpa: grandpa::{Module, Call, Storage, Config, Event},
-		Indices: indices::{default, Config<T>},
+		Indices: indices,
 		Balances: balances::{default, Error},
 		TransactionPayment: transaction_payment::{Module, Storage},
 		Sudo: sudo,
 		RandomnessCollectiveFlip: randomness_collective_flip::{Module, Call, Storage},
-		// Used for the module in `./price_fetch.rs`
+
 		PriceFetch: price_fetch::{Module, Call, Storage, Event<T>, ValidateUnsigned},
 		OffchainCB: offchaincb::{Module, Call, Storage, Event<T>, ValidateUnsigned},
 	}
@@ -355,7 +352,7 @@ pub type SignedExtra = (
 );
 /// Unchecked extrinsic type as expected by this runtime.
 pub type UncheckedExtrinsic = generic::UncheckedExtrinsic<Address, Call, Signature, SignedExtra>;
-/// Just that the Signature Signer needs this aditional definition as well
+/// Just that the Signature Signer needs this additional definition as well
 pub type SignedPayload = generic::SignedPayload<Call, SignedExtra>;
 /// Extrinsic type that has already been checked.
 pub type CheckedExtrinsic = generic::CheckedExtrinsic<AccountId, Call, SignedExtra>;
@@ -363,7 +360,7 @@ pub type CheckedExtrinsic = generic::CheckedExtrinsic<AccountId, Call, SignedExt
 pub type Executive = executive::Executive<Runtime, Block, system::ChainContext<Runtime>, Runtime, AllModules>;
 
 impl_runtime_apis! {
-	impl client_api::Core<Block> for Runtime {
+	impl sp_api::Core<Block> for Runtime {
 		fn version() -> RuntimeVersion {
 			VERSION
 		}
@@ -377,14 +374,14 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl client_api::Metadata<Block> for Runtime {
+	impl sp_api::Metadata<Block> for Runtime {
 		fn metadata() -> OpaqueMetadata {
 			Runtime::metadata().into()
 		}
 	}
 
 	impl block_builder_api::BlockBuilder<Block> for Runtime {
-		fn apply_extrinsic(extrinsic: <Block as BlockT>::Extrinsic) -> ApplyResult {
+		fn apply_extrinsic(extrinsic: <Block as BlockT>::Extrinsic) -> ApplyExtrinsicResult {
 			Executive::apply_extrinsic(extrinsic)
 		}
 
@@ -392,11 +389,14 @@ impl_runtime_apis! {
 			Executive::finalize_block()
 		}
 
-		fn inherent_extrinsics(data: InherentData) -> Vec<<Block as BlockT>::Extrinsic> {
+		fn inherent_extrinsics(data: inherents::InherentData) -> Vec<<Block as BlockT>::Extrinsic> {
 			data.create_extrinsics()
 		}
 
-		fn check_inherents(block: Block, data: InherentData) -> CheckInherentsResult {
+		fn check_inherents(
+			block: Block,
+			data: inherents::InherentData,
+		) -> inherents::CheckInherentsResult {
 			data.check_extrinsics(&block)
 		}
 
@@ -405,7 +405,7 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl client_api::TaggedTransactionQueue<Block> for Runtime {
+	impl txpool_runtime_api::TaggedTransactionQueue<Block> for Runtime {
 		fn validate_transaction(tx: <Block as BlockT>::Extrinsic) -> TransactionValidity {
 			Executive::validate_transaction(tx)
 		}
@@ -427,15 +427,14 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl substrate_session::SessionKeys<Block> for Runtime {
+	impl sp_session::SessionKeys<Block> for Runtime {
 		fn generate_session_keys(seed: Option<Vec<u8>>) -> Vec<u8> {
-			let seed = seed.as_ref().map(|s| rstd::str::from_utf8(&s).expect("Seed is an utf8 string"));
 			opaque::SessionKeys::generate(seed)
 		}
 	}
 
 	impl fg_primitives::GrandpaApi<Block> for Runtime {
-		fn grandpa_authorities() -> Vec<(GrandpaId, GrandpaWeight)> {
+		fn grandpa_authorities() -> GrandpaAuthorityList {
 			Grandpa::grandpa_authorities()
 		}
 	}
