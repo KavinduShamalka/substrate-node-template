@@ -13,12 +13,12 @@ use rstd::prelude::*;
 use rstd::{collections::btree_map::BTreeMap};
 use app_crypto::RuntimeAppPublic;
 use support::{decl_module, decl_storage, decl_event, print, dispatch::Result};
-use system::ensure_signed;
 use system::offchain::{SubmitSignedTransaction, SubmitUnsignedTransaction};
 use codec::{Encode, Decode};
 use simple_json::{ self, json::JsonValue };
 use core::convert::{ TryInto };
-use sr_primitives::{
+use runtime_io::{ self, misc::print_utf8 as print_bytes, misc::print_num as print_num };
+use sp_runtime::{
   transaction_validity::{
     TransactionValidity, TransactionLongevity, ValidTransaction, InvalidTransaction
   }
@@ -80,6 +80,7 @@ pub trait Trait: timestamp::Trait + system::Trait {
 
   /// The local keytype
   type KeyType: RuntimeAppPublic + From<Self::AccountId> + Into<Self::AccountId> + Clone;
+  // type KeyType: RuntimeAppPublic + Clone;
 }
 
 /// The type of requests we can send to the offchain worker
@@ -134,7 +135,8 @@ decl_module! {
     fn on_initialize(block: T::BlockNumber) {
       <Self as Store>::OcRequests::kill();
 
-      if BLOCK_FETCH_DUR > 0 && (TryInto::<u64>::try_into(block).ok().unwrap()) % BLOCK_FETCH_DUR == 0 {
+      let current_block = TryInto::<u64>::try_into(block).ok().unwrap();
+      if BLOCK_FETCH_DUR > 0 && current_block % BLOCK_FETCH_DUR == 0 {
         let _ = Self::enque_pricefetch_tasks();
       }
     }
@@ -144,11 +146,11 @@ decl_module! {
       let now = <timestamp::Module<T>>::get();
 
       // Debug printout
-      runtime_io::print_utf8(b"record_price: called");
-      runtime_io::print_utf8(&symbol);
-      runtime_io::print_utf8(&remote_src);
-      runtime_io::print_num(price.dollars.into());
-      runtime_io::print_num(price.cents.into());
+      print_bytes(b"record_price: called");
+      print_bytes(&symbol);
+      print_bytes(&remote_src);
+      print_num(price.dollars.into());
+      print_num(price.cents.into());
 
       // Spit out an event and Add to storage
       Self::deposit_event(RawEvent::PriceFetched(
@@ -169,10 +171,10 @@ decl_module! {
 
     pub fn record_agg_pp(_origin, sym: Vec<u8>, price: Price) -> Result {
       // Debug printout
-      runtime_io::print_utf8(b"record_agg_pp: called");
-      runtime_io::print_utf8(&sym);
-      runtime_io::print_num(price.dollars.into());
-      runtime_io::print_num(price.cents.into());
+      print_bytes(b"record_agg_pp: called");
+      print_bytes(&sym);
+      print_num(price.dollars.into());
+      print_num(price.cents.into());
 
       let now = <timestamp::Module<T>>::get();
       // Turn off the flag for request has been handled
@@ -224,20 +226,20 @@ impl<T: Trait> Module<T> {
   }
 
   fn fetch_json(remote_url: &str) -> StdResult<JsonValue> {
-    let id = runtime_io::http_request_start("GET", remote_url, &[])
+    let id = runtime_io::offchain::http_request_start("GET", remote_url, &[])
       .map_err(|_| "http_request start error")?;
-    let _ = runtime_io::http_response_wait(&[id], None);
+    let _ = runtime_io::offchain::http_response_wait(&[id], None);
 
     let mut json_result: Vec<u8> = vec![];
     loop {
       let mut buffer = vec![0; 1024];
-      let _read = runtime_io::http_response_read_body(id, &mut buffer, None).map_err(|_e| ());
+      let _read = runtime_io::offchain::http_response_read_body(id, &mut buffer, None).map_err(|_e| ());
       json_result = [&json_result[..], &buffer[..]].concat();
       if _read == Ok(0) { break }
     }
 
     // Print out the whole JSON blob
-    runtime_io::print_utf8(&json_result);
+    print_bytes(&json_result);
 
     let json_val: JsonValue = simple_json::parse_json(
       &rstd::str::from_utf8(&json_result).unwrap())
@@ -247,9 +249,9 @@ impl<T: Trait> Module<T> {
   }
 
   fn fetch_price(sym: Vec<u8>, remote_src: Vec<u8>, remote_url: Vec<u8>) -> Result {
-    runtime_io::print_utf8(&sym);
-    runtime_io::print_utf8(&remote_src);
-    runtime_io::print_utf8(b"---");
+    print_bytes(&sym);
+    print_bytes(&remote_src);
+    print_bytes(b"---");
 
     let json = Self::fetch_json(rstd::str::from_utf8(&remote_url).unwrap())?;
 
@@ -268,13 +270,13 @@ impl<T: Trait> Module<T> {
 
   fn fetch_price_from_coincap(_json: JsonValue) -> StdResult<Price> {
     // TODO: imeplement the logic
-    runtime_io::print_utf8(b"-- fetch_price_from_coincap");
+    print_bytes(b"-- fetch_price_from_coincap");
     Ok(Price::new(100, 3500, None))
   }
 
   fn fetch_price_from_coinmarketcap(_json: JsonValue) -> StdResult<Price> {
     // TODO: imeplement the logic
-    runtime_io::print_utf8(b"-- fetch_price_from_coinmarketcap");
+    print_bytes(b"-- fetch_price_from_coinmarketcap");
     Ok(Price::new(200, 5000, None))
   }
 
@@ -294,6 +296,7 @@ impl<T: Trait> Module<T> {
   }
 }
 
+#[allow(deprecated)]
 impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
   type Call = Call<T>;
 

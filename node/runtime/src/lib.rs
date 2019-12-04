@@ -9,14 +9,14 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use rstd::prelude::*;
-use primitives::{OpaqueMetadata, crypto::key_types};
+use primitives::{OpaqueMetadata};
 use sp_runtime::{
 	ApplyExtrinsicResult, transaction_validity::TransactionValidity, generic, create_runtime_str,
 	impl_opaque_keys, MultiSignature
 };
-use sp_primitives::weights::Weight;
 use sp_runtime::traits::{
-	NumberFor, BlakeTwo256, Block as BlockT, StaticLookup, Verify, ConvertInto, IdentifyAccount
+	NumberFor, BlakeTwo256, Block as BlockT, StaticLookup, Verify, ConvertInto, IdentifyAccount,
+	SaturatedConversion
 };
 use sp_api::impl_runtime_apis;
 use aura_primitives::sr25519::AuthorityId as AuraId;
@@ -29,9 +29,9 @@ use version::NativeVersion;
 // A few exports that help ease life for downstream crates.
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
+pub use sp_runtime::{ Permill, Perbill };
 pub use timestamp::Call as TimestampCall;
 pub use balances::Call as BalancesCall;
-pub use sp_runtime::{Permill, Perbill};
 pub use support::{
 	StorageValue, construct_runtime, parameter_types,
 	traits::Randomness,
@@ -283,13 +283,15 @@ impl offchaincb::Trait for Runtime {
 }
 
 impl system::offchain::CreateTransaction<Runtime, UncheckedExtrinsic> for Runtime {
+	type Public = <Signature as Verify>::Signer;
 	type Signature = Signature;
 
-	fn create_transaction<F: system::offchain::Signer<AccountId, Self::Signature>>(
+	fn create_transaction<TSigner: system::offchain::Signer<Self::Public, Self::Signature>> (
 		call: Call,
+		public: Self::Public,
 		account: AccountId,
-		nonce: Index,
-	) -> Option<(Call, <UncheckedExtrinsic as sr_primitives::traits::Extrinsic>::SignaturePayload)> {
+		index: Index,
+	) -> Option<(Call, <UncheckedExtrinsic as sp_runtime::traits::Extrinsic>::SignaturePayload)> {
 		let period = 1 << 8;
 		let current_block = System::block_number().saturated_into::<u64>();
 		let tip = 0;
@@ -297,13 +299,12 @@ impl system::offchain::CreateTransaction<Runtime, UncheckedExtrinsic> for Runtim
 			system::CheckVersion::<Runtime>::new(),
 			system::CheckGenesis::<Runtime>::new(),
 			system::CheckEra::<Runtime>::from(generic::Era::mortal(period, current_block)),
-			system::CheckNonce::<Runtime>::from(nonce),
+			system::CheckNonce::<Runtime>::from(index),
 			system::CheckWeight::<Runtime>::new(),
-			// TODO: figure what this is supposed to be
-			transaction_payment::ChargeTransactionPayment::<Runtime>::from(tip)
+			transaction_payment::ChargeTransactionPayment::<Runtime>::from(tip),
 		);
 		let raw_payload = SignedPayload::new(call, extra).ok()?;
-		let signature = F::sign(account.clone(), &raw_payload)?;
+		let signature = TSigner::sign(account.clone(), &raw_payload)?;
 		let address = Indices::unlookup(account);
 		let (call, extra, _) = raw_payload.deconstruct();
 		Some((call, (address, signature, extra)))

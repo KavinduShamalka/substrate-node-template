@@ -9,7 +9,8 @@ use support::{decl_module, decl_event, decl_storage, print, StorageValue, dispat
 use system::{ensure_signed, ensure_root, ensure_none};
 use system::offchain::{SubmitSignedTransaction, SubmitUnsignedTransaction};
 use codec::{Encode, Decode};
-use sr_primitives::{
+use runtime_io::{ self, misc::print_utf8 as print_bytes, misc::print_num as print_num };
+use sp_runtime::{
   transaction_validity::{
     TransactionValidity, TransactionLongevity, ValidTransaction, InvalidTransaction
   }
@@ -33,6 +34,7 @@ pub trait Trait: timestamp::Trait + system::Trait  {
 
   /// The local keytype
   type KeyType: RuntimeAppPublic + From<Self::AccountId> + Into<Self::AccountId> + Clone;
+  // type KeyType: RuntimeAppPublic + Clone;
 }
 
 #[cfg_attr(feature = "std", derive(PartialEq, Eq, Debug))]
@@ -92,11 +94,11 @@ decl_module! {
       // otherwise we've just consumed their fee.
       let author = ensure_signed(origin)?;
 
-      runtime_io::print_utf8(b"pong_signed: called");
-      runtime_io::print_num(nonce.into());
+      print_bytes(b"pong_signed: called");
+      print_num(nonce.into());
 
       if Self::is_authority(&author) {
-        runtime_io::print_utf8(b"pong_signed: is_authority");
+        print_bytes(b"pong_signed: is_authority");
         Self::deposit_event(RawEvent::Ack(nonce, author));
       }
 
@@ -105,8 +107,8 @@ decl_module! {
 
     pub fn pong_unsigned(origin, nonce: u8) -> Result {
       ensure_none(origin)?;
-      runtime_io::print_utf8(b"pong_unsigned: called");
-      runtime_io::print_num(nonce.into());
+      print_bytes(b"pong_unsigned: called");
+      print_num(nonce.into());
 
       Self::deposit_event(RawEvent::AckNoAuthor(nonce));
       Ok(())
@@ -156,7 +158,7 @@ impl<T: Trait> Module<T> {
   /// newly signed and submitted trasnaction
   fn offchain_signed(key: &T::AccountId, nonce: u8) -> Result {
     print("offchain_signed");
-    runtime_io::print_num(nonce.into());
+    print_num(nonce.into());
 
     let call = Call::pong_signed(nonce);
     T::SubmitTransaction::sign_and_submit(call, key.clone().into())
@@ -165,7 +167,7 @@ impl<T: Trait> Module<T> {
 
   fn offchain_unsigned(nonce: u8) -> Result {
     print("offchain_unsigned");
-    runtime_io::print_num(nonce.into());
+    print_num(nonce.into());
 
     let call = Call::pong_unsigned(nonce);
     T::SubmitUnsignedTransaction::submit_unsigned(call)
@@ -201,6 +203,7 @@ impl<T: Trait> Module<T> {
   }
 }
 
+#[allow(deprecated)]
 impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
   type Call = Call<T>;
 

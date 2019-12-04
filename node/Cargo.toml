@@ -92,6 +92,7 @@ rev = "368318c9b11c07596cde5dc37220258cfa7dfa76"
 
 [dependencies.runtime]
 package = "runtime"
+path = "./runtime"
 
 [dependencies.sp-runtime]
 git = "https://github.com/paritytech/substrate.git"

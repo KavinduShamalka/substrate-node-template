@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 serde = { version = "1.0.101", optional = true, features = ["derive"] }
+safe-mix = { version = "1.0.0", default-features = false }
 
 [dependencies.codec]
 package = "parity-scale-codec"
@@ -97,12 +98,6 @@ rev = "368318c9b11c07596cde5dc37220258cfa7dfa76"
 package = "sp-io"
 default-features = false
 
-[dependencies.safe-mix]
-git = "https://github.com/paritytech/substrate.git"
-rev = "368318c9b11c07596cde5dc37220258cfa7dfa76"
-version = "1.0.0"
-default-features = false
-
 [dependencies.simple-json]
 git = 'https://github.com/jimmychu0807/simple-json'
 version = '0.1.1'
@@ -126,6 +121,7 @@ default-features = false
 [dependencies.sudo]
 git = "https://github.com/paritytech/substrate.git"
 rev = "368318c9b11c07596cde5dc37220258cfa7dfa76"
+package = "pallet-sudo"
 default-features = false
 
 [dependencies.support]
