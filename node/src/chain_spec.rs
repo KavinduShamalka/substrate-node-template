@@ -1,5 +1,5 @@
 use primitives::{Pair, Public, sr25519};
-use offchain_node_runtime::{
+use runtime::{
 	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig,
 	SudoConfig, IndicesConfig, SystemConfig, WASM_BINARY, Signature
 };

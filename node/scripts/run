@@ -1,15 +1,16 @@
 #!/usr/bin/env ruby
 EXE_FLAG = ARGV[0];
-BINARY="offchain-node";
+BINARY = "offchain-node";
 
 project_root = File.expand_path("#{__dir__}/..");
 
 if (EXE_FLAG == "build")
-  # This cmd runs in local dev env
   system("cd #{project_root}; cargo remote -- build --release")
-elsif (EXE_FLAG == "clean")
-  # The following two cmds run in remote dev env
-  system("#{project_root}/target/release/#{BINARY} purge-chain --dev && #{project_root}/target/release/#{BINARY} --dev");
 else
-  system("#{project_root}/target/release/#{BINARY} --dev");
+  if (EXE_FLAG == "clean")
+    # this cmd meant to be run in remote dev host
+    system("#{project_root}/target/release/#{BINARY} purge-chain --dev");
+  end
+  # this cmd meant to be run in remote dev host
+  system("#{project_root}/target/release/#{BINARY} --dev -lruntime=trace");
 end

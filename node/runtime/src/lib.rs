@@ -37,8 +37,6 @@ pub use support::{
 	traits::Randomness,
 	weights::Weight,
 };
-/// Additionally, we need `system` here
-use system::offchain::TransactionSubmitter;
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -67,8 +65,7 @@ pub type Hash = primitives::H256;
 pub type DigestItem = generic::DigestItem<Hash>;
 
 /// Our modules (two modules here)
-mod price_fetch;
-mod offchaincb;
+pub mod price_fetch;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
 /// the specifics of the runtime. They can then be made to be agnostic over specific formats
@@ -235,51 +232,17 @@ impl sudo::Trait for Runtime {
 	type Proposal = Call;
 }
 
-pub mod price_fetch_crypto {
-	pub use crate::price_fetch::KEY_TYPE;
-	use primitives::sr25519;
-	app_crypto::app_crypto!(sr25519, KEY_TYPE);
-
-	impl From<Signature> for super::Signature {
-		fn from(a: Signature) -> Self {
-			sr25519::Signature::from(a).into()
-		}
-	}
-}
-
 /// We need to define the Transaction signer for that using the Key definition
-type OffchainPFAccount = price_fetch_crypto::Public;
-type SubmitPFTransaction = TransactionSubmitter<OffchainPFAccount, Runtime, UncheckedExtrinsic>;
-
+type SubmitPFTransaction = system::offchain::TransactionSubmitter<
+	price_fetch::crypto::Public,
+	Runtime,
+	UncheckedExtrinsic
+>;
 impl price_fetch::Trait for Runtime {
-	type Call = Call;
 	type Event = Event;
+	type Call = Call;
 	type SubmitTransaction = SubmitPFTransaction;
 	type SubmitUnsignedTransaction = SubmitPFTransaction;
-	type KeyType = OffchainPFAccount;
-}
-
-pub mod offchaincb_crypto {
-	pub use crate::offchaincb::KEY_TYPE;
-	use primitives::sr25519;
-	app_crypto::app_crypto!(sr25519, KEY_TYPE);
-
-	impl From<Signature> for super::Signature {
-		fn from(a: Signature) -> Self {
-			sr25519::Signature::from(a).into()
-		}
-	}
-}
-
-type OffchainCBAccount = offchaincb_crypto::Public;
-type SubmitCBTransaction = TransactionSubmitter<OffchainCBAccount, Runtime, UncheckedExtrinsic>;
-
-impl offchaincb::Trait for Runtime {
-	type Call = Call;
-	type Event = Event;
-	type SubmitTransaction = SubmitCBTransaction;
-	type SubmitUnsignedTransaction = SubmitCBTransaction;
-	type KeyType = OffchainCBAccount;
 }
 
 impl system::offchain::CreateTransaction<Runtime, UncheckedExtrinsic> for Runtime {
@@ -304,7 +267,7 @@ impl system::offchain::CreateTransaction<Runtime, UncheckedExtrinsic> for Runtim
 			transaction_payment::ChargeTransactionPayment::<Runtime>::from(tip),
 		);
 		let raw_payload = SignedPayload::new(call, extra).ok()?;
-		let signature = TSigner::sign(account.clone(), &raw_payload)?;
+		let signature = TSigner::sign(public, &raw_payload)?;
 		let address = Indices::unlookup(account);
 		let (call, extra, _) = raw_payload.deconstruct();
 		Some((call, (address, signature, extra)))
@@ -328,7 +291,6 @@ construct_runtime!(
 		RandomnessCollectiveFlip: randomness_collective_flip::{Module, Call, Storage},
 
 		PriceFetch: price_fetch::{Module, Call, Storage, Event<T>, ValidateUnsigned},
-		OffchainCB: offchaincb::{Module, Call, Storage, Event<T>, ValidateUnsigned},
 	}
 );
 

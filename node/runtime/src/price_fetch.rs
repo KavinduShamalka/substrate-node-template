@@ -9,20 +9,22 @@
 /// https://github.com/paritytech/substrate/blob/master/srml/example/src/lib.rs
 
 // We have to import a few things
-use rstd::prelude::*;
-use rstd::{collections::btree_map::BTreeMap};
-use app_crypto::RuntimeAppPublic;
-use support::{decl_module, decl_storage, decl_event, print, dispatch::Result};
-use system::offchain::{SubmitSignedTransaction, SubmitUnsignedTransaction};
-use codec::{Encode, Decode};
+use rstd::{prelude::*, collections::btree_map::BTreeMap, convert::TryInto};
+use primitives::crypto::KeyTypeId;
+use support::{decl_module, decl_storage, decl_event, dispatch, debug};
+use system::{ensure_signed, offchain, offchain::SubmitUnsignedTransaction};
 use simple_json::{ self, json::JsonValue };
-use core::convert::{ TryInto };
-use runtime_io::{ self, misc::print_utf8 as print_bytes, misc::print_num as print_num };
+
+use runtime_io::{ self, misc::print_utf8 as print_bytes };
+use codec::{Encode, Decode};
 use sp_runtime::{
+  offchain::http,
   transaction_validity::{
     TransactionValidity, TransactionLongevity, ValidTransaction, InvalidTransaction
   }
 };
+
+type StdResult<T> = core::result::Result<T, &'static str>;
 
 #[derive(Debug, Encode, Decode, Clone, PartialEq, Eq)]
 pub struct Price {
@@ -44,9 +46,13 @@ impl Price {
 ///
 /// For security reasons the offchain worker doesn't have direct access to the keys
 /// but only to app-specific subkeys, which are defined and grouped by their `KeyTypeId`.
-/// We define it here as `ofcb` (for `offchain callback`). Yours should be specific to
-/// the module you are actually building.
-pub const KEY_TYPE: app_crypto::KeyTypeId = app_crypto::KeyTypeId(*b"ofpf");
+pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"ofpf");
+
+pub mod crypto {
+  pub use super::KEY_TYPE;
+  use sp_runtime::app_crypto::{app_crypto, sr25519};
+  app_crypto!(sr25519, KEY_TYPE);
+}
 
 // This automates price fetching every certain blocks. Set to 0 disable this feature.
 //   Then you need to manucally kickoff pricefetch
@@ -63,24 +69,14 @@ pub const FETCHED_CRYPTOS: [(&'static [u8], &'static [u8], &'static [u8]); 1] = 
   //  b"https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=2e6d8847-bcea-4999-87b1-ad452efe4e40&symbol=ETH"),
 ];
 
-pub type StdResult<T> = core::result::Result<T, &'static str>;
-
 /// The module's configuration trait.
 pub trait Trait: timestamp::Trait + system::Trait {
   /// The overarching event type.
   type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
-
-  /// A dispatchable call type. We need to define it for the offchain worker to
-  /// reference the `pong` function it wants to call.
   type Call: From<Call<Self>>;
 
-  /// Let's define the helper we use to create signed transactions with
-  type SubmitTransaction: SubmitSignedTransaction<Self, <Self as Trait>::Call>;
-  type SubmitUnsignedTransaction: SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
-
-  /// The local keytype
-  type KeyType: RuntimeAppPublic + From<Self::AccountId> + Into<Self::AccountId> + Clone;
-  // type KeyType: RuntimeAppPublic + Clone;
+  type SubmitTransaction: offchain::SubmitSignedTransaction<Self, <Self as Trait>::Call>;
+  type SubmitUnsignedTransaction: offchain::SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
 }
 
 /// The type of requests we can send to the offchain worker
@@ -104,22 +100,22 @@ decl_event!(
 decl_storage! {
   trait Store for Module<T: Trait> as PriceFetch {
     // storage about offchain worker tasks
-    pub OcRequests get(oc_requests): Vec<OffchainRequest>;
-    pub UpdateAggPP get(update_agg_pp): bool;
+    OcRequests get(oc_requests): Vec<OffchainRequest>;
+    UpdateAggPP get(update_agg_pp): bool;
 
     // storage about source price points
     // mapping of ID(index) -> (timestamp, price_obj)
-    pub SrcPricePoints get(src_price_pts): Vec<(T::Moment, Price)>;
+    SrcPricePoints get(src_price_pts): Vec<(T::Moment, Price)>;
 
     // mapping of token sym -> pp_id
-    pub TokenSrcPPMap: map Vec<u8> => Vec<u64>;
+    TokenSrcPPMap: map Vec<u8> => Vec<u64>;
 
     // mapping of remote_src -> pp_id
-    pub RemoteSrcPPMap: map Vec<u8> => Vec<u64>;
+    RemoteSrcPPMap: map Vec<u8> => Vec<u64>;
 
     // storage about aggregated price points (calculated in our logic)
-    pub AggPricePoints get(agg_price_pts): Vec<(T::Moment, Price)>;
-    pub TokenAggPPMap: map Vec<u8> => Vec<u64>;
+    AggPricePoints get(agg_price_pts): Vec<(T::Moment, Price)>;
+    TokenAggPPMap: map Vec<u8> => Vec<u64>;
   }
 }
 
@@ -141,16 +137,19 @@ decl_module! {
       }
     }
 
-    pub fn record_price(_origin, crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>), price: Price) -> Result {
+    pub fn record_price(
+      _origin,
+      crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>),
+      price: Price
+    ) -> dispatch::Result {
       let (symbol, remote_src) = (crypto_info.0, crypto_info.1);
       let now = <timestamp::Module<T>>::get();
 
       // Debug printout
-      print_bytes(b"record_price: called");
-      print_bytes(&symbol);
-      print_bytes(&remote_src);
-      print_num(price.dollars.into());
-      print_num(price.cents.into());
+      debug::info!("record_price: called");
+      debug::info!("{}", core::str::from_utf8(&symbol).unwrap());
+      debug::info!("{}", core::str::from_utf8(&remote_src).unwrap());
+      debug::info!("price: {:?}", price);
 
       // Spit out an event and Add to storage
       Self::deposit_event(RawEvent::PriceFetched(
@@ -169,12 +168,9 @@ decl_module! {
       Ok(())
     }
 
-    pub fn record_agg_pp(_origin, sym: Vec<u8>, price: Price) -> Result {
+    pub fn record_agg_pp(_origin, sym: Vec<u8>, price: Price) -> dispatch::Result {
       // Debug printout
-      print_bytes(b"record_agg_pp: called");
-      print_bytes(&sym);
-      print_num(price.dollars.into());
-      print_num(price.cents.into());
+      debug::info!("record_agg_pp: called");
 
       let now = <timestamp::Module<T>>::get();
       // Turn off the flag for request has been handled
@@ -202,12 +198,12 @@ decl_module! {
           OffchainRequest::PriceFetch(sym, remote_src, remote_url) =>
             Self::fetch_price(sym, remote_src, remote_url)
         };
-        if let Err(err_msg) = res { print(err_msg) }
+        if let Err(err_msg) = res { debug::error!("{}", err_msg) }
       }
 
       // Type II task: aggregate price
       if Self::update_agg_pp() {
-        if let Err(err_msg) = Self::aggregate_pp() { print(err_msg); }
+        if let Err(err_msg) = Self::aggregate_pp() { debug::error!("{}", err_msg); }
       }
     } // end of `fn offchain_worker`
 
@@ -215,7 +211,7 @@ decl_module! {
 }
 
 impl<T: Trait> Module<T> {
-  fn enque_pricefetch_tasks() -> Result {
+  fn enque_pricefetch_tasks() -> dispatch::Result {
     for crypto_info in FETCHED_CRYPTOS.iter() {
       <OcRequests>::mutate(|v|
         v.push(OffchainRequest::PriceFetch(crypto_info.0.to_vec(),
@@ -248,7 +244,7 @@ impl<T: Trait> Module<T> {
     Ok(json_val)
   }
 
-  fn fetch_price(sym: Vec<u8>, remote_src: Vec<u8>, remote_url: Vec<u8>) -> Result {
+  fn fetch_price(sym: Vec<u8>, remote_src: Vec<u8>, remote_url: Vec<u8>) -> dispatch::Result {
     print_bytes(&sym);
     print_bytes(&remote_src);
     print_bytes(b"---");
@@ -280,7 +276,7 @@ impl<T: Trait> Module<T> {
     Ok(Price::new(200, 5000, None))
   }
 
-  fn aggregate_pp() -> Result {
+  fn aggregate_pp() -> dispatch::Result {
     let mut pp_map = BTreeMap::new();
 
     // TODO: calculate the map of sym -> pp
@@ -289,7 +285,7 @@ impl<T: Trait> Module<T> {
     pp_map.iter().for_each(|(sym, price)| {
       let call = Call::record_agg_pp(sym.clone(), price.clone());
       if let Err(_) = T::SubmitUnsignedTransaction::submit_unsigned(call) {
-        print("aggregate_pp: submit_unsigned_call error");
+        debug::error!("aggregate_pp: submit_unsigned_call error");
       }
     });
     Ok(())
