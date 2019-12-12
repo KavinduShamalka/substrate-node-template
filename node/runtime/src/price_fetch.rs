@@ -56,7 +56,7 @@ pub mod crypto {
 
 // This automates price fetching every certain blocks. Set to 0 disable this feature.
 //   Then you need to manucally kickoff pricefetch
-pub const BLOCK_FETCH_DUR: u64 = 5;
+pub const BLOCK_FETCH_DUR: u64 = 3;
 
 pub const FETCHED_CRYPTOS: [(&'static [u8], &'static [u8], &'static [u8]); 1] = [
   (b"BTC", b"coincap",
@@ -79,14 +79,6 @@ pub trait Trait: timestamp::Trait + system::Trait {
   type SubmitUnsignedTransaction: offchain::SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
 }
 
-/// The type of requests we can send to the offchain worker
-#[cfg_attr(feature = "std", derive(PartialEq, Debug))]
-#[derive(Encode, Decode)]
-pub enum OffchainRequest {
-  /// If an authorised offchain worker sees this, will kick off to work
-  PriceFetch(Vec<u8>, Vec<u8>, Vec<u8>)
-}
-
 decl_event!(
   pub enum Event<T> where
     Moment = <T as timestamp::Trait>::Moment {
@@ -99,8 +91,6 @@ decl_event!(
 // This module's storage items.
 decl_storage! {
   trait Store for Module<T: Trait> as PriceFetch {
-    // storage about offchain worker tasks
-    OcRequests get(oc_requests): Vec<OffchainRequest>;
     UpdateAggPP get(update_agg_pp): bool;
 
     // storage about source price points
@@ -128,17 +118,10 @@ decl_module! {
     fn deposit_event() = default;
 
     // Clean the state on initialization of the block
-    fn on_initialize(block: T::BlockNumber) {
-      <Self as Store>::OcRequests::kill();
-
-      let current_block = TryInto::<u64>::try_into(block).ok().unwrap();
-      if BLOCK_FETCH_DUR > 0 && current_block % BLOCK_FETCH_DUR == 0 {
-        let _ = Self::enque_pricefetch_tasks();
-      }
-    }
+    fn on_initialize(block: T::BlockNumber) {}
 
     pub fn record_price(
-      _origin,
+      origin,
       crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>),
       price: Price
     ) -> dispatch::Result {
@@ -146,19 +129,20 @@ decl_module! {
       let now = <timestamp::Module<T>>::get();
 
       // Debug printout
-      debug::info!("record_price: called");
-      debug::info!("{}", core::str::from_utf8(&symbol).unwrap());
-      debug::info!("{}", core::str::from_utf8(&remote_src).unwrap());
-      debug::info!("price: {:?}", price);
+      debug::info!("-- record_price: {:?}, {:?}, {:?}",
+        core::str::from_utf8(&symbol).unwrap(),
+        core::str::from_utf8(&remote_src).unwrap(),
+        price
+      );
 
       // Spit out an event and Add to storage
       Self::deposit_event(RawEvent::PriceFetched(
         symbol.clone(), remote_src.clone(), now.clone(), price.clone()));
 
       let price_pt = (now, price);
-      <SrcPricePoints<T>>::mutate(|vec| vec.push(price_pt));
       // The index serves as the ID
       let pp_id: u64 = Self::src_price_pts().len().try_into().unwrap();
+      <SrcPricePoints<T>>::mutate(|vec| vec.push(price_pt));
       <TokenSrcPPMap>::mutate(symbol, |token_vec| token_vec.push(pp_id));
       <RemoteSrcPPMap>::mutate(remote_src, |rs_vec| rs_vec.push(pp_id));
 
@@ -168,9 +152,9 @@ decl_module! {
       Ok(())
     }
 
-    pub fn record_agg_pp(_origin, sym: Vec<u8>, price: Price) -> dispatch::Result {
+    pub fn record_agg_pp(origin, sym: Vec<u8>, price: Price) -> dispatch::Result {
       // Debug printout
-      debug::info!("record_agg_pp: called");
+      debug::info!("-- record_agg_pp: called");
 
       let now = <timestamp::Module<T>>::get();
       // Turn off the flag for request has been handled
@@ -182,84 +166,81 @@ decl_module! {
 
       // Record in the storage
       let price_pt = (now.clone(), price.clone());
-      <AggPricePoints<T>>::mutate(|vec| vec.push(price_pt));
       let pp_id: u64 = Self::agg_price_pts().len().try_into().unwrap();
+      <AggPricePoints<T>>::mutate(|vec| vec.push(price_pt));
       <TokenAggPPMap>::mutate(sym, |vec| vec.push(pp_id));
 
       Ok(())
     }
 
-    fn offchain_worker(_block: T::BlockNumber) {
+    fn offchain_worker(block: T::BlockNumber) {
+      let current_block = TryInto::<u64>::try_into(block).ok().unwrap();
+
       // Type I task: fetch_price
-      for fetch_info in Self::oc_requests() {
-        // enhancement: batch the fetches together and send an array to
-        //   `http_response_wait` in one go.
-        let res = match fetch_info {
-          OffchainRequest::PriceFetch(sym, remote_src, remote_url) =>
-            Self::fetch_price(sym, remote_src, remote_url)
-        };
-        if let Err(err_msg) = res { debug::error!("{}", err_msg) }
+      if BLOCK_FETCH_DUR > 0 && current_block % BLOCK_FETCH_DUR == 0 {
+        for (sym, remote_src, remote_url) in FETCHED_CRYPTOS.iter() {
+          if let Err(e) = Self::fetch_price(*sym, *remote_src, *remote_url) {
+            debug::error!("Error fetching: {:?}, {:?}: {}", sym, remote_src, e);
+          }
+        }
       }
 
       // Type II task: aggregate price
       if Self::update_agg_pp() {
-        if let Err(err_msg) = Self::aggregate_pp() { debug::error!("{}", err_msg); }
+        if let Err(e) = Self::aggregate_pp() {
+          debug::error!("Error aggregating price: {}", e);
+        }
       }
-    } // end of `fn offchain_worker`
+    } // end of `fn offchain_worker()`
 
   }
 }
 
 impl<T: Trait> Module<T> {
-  fn enque_pricefetch_tasks() -> dispatch::Result {
-    for crypto_info in FETCHED_CRYPTOS.iter() {
-      <OcRequests>::mutate(|v|
-        v.push(OffchainRequest::PriceFetch(crypto_info.0.to_vec(),
-          crypto_info.1.to_vec(), crypto_info.2.to_vec()))
-      );
-    }
-    Ok(())
-  }
+  fn fetch_json<'a>(remote_url: &'a [u8]) -> StdResult<JsonValue> {
+    let remote_url_str = core::str::from_utf8(remote_url)
+      .map_err(|_| "Error in converting remote_url to string")?;
 
-  fn fetch_json(remote_url: &str) -> StdResult<JsonValue> {
-    let id = runtime_io::offchain::http_request_start("GET", remote_url, &[])
-      .map_err(|_| "http_request start error")?;
-    let _ = runtime_io::offchain::http_response_wait(&[id], None);
+    let pending = http::Request::get(remote_url_str).send()
+      .map_err(|_| "Error in sending http GET request")?;
 
-    let mut json_result: Vec<u8> = vec![];
-    loop {
-      let mut buffer = vec![0; 1024];
-      let _read = runtime_io::offchain::http_response_read_body(id, &mut buffer, None).map_err(|_e| ());
-      json_result = [&json_result[..], &buffer[..]].concat();
-      if _read == Ok(0) { break }
+    let response = pending.wait()
+      .map_err(|_| "Error in waiting http response back")?;
+
+    if response.code != 200 {
+      debug::warn!("Unexpected status code: {}", response.code);
+      return Err("Non-200 status code returned from http request");
     }
+
+    let json_result: Vec<u8> = response.body().collect::<Vec<u8>>();
 
     // Print out the whole JSON blob
     print_bytes(&json_result);
 
     let json_val: JsonValue = simple_json::parse_json(
-      &rstd::str::from_utf8(&json_result).unwrap())
+      &core::str::from_utf8(&json_result).unwrap())
       .map_err(|_| "JSON parsing error")?;
 
     Ok(json_val)
   }
 
-  fn fetch_price(sym: Vec<u8>, remote_src: Vec<u8>, remote_url: Vec<u8>) -> dispatch::Result {
-    print_bytes(&sym);
-    print_bytes(&remote_src);
-    print_bytes(b"---");
+  fn fetch_price<'a>(sym: &'a [u8], remote_src: &'a [u8], remote_url: &'a [u8]) -> dispatch::Result {
+    debug::info!("fetch price: {:?}:{:?}",
+      core::str::from_utf8(sym).unwrap(),
+      core::str::from_utf8(remote_src).unwrap()
+    );
 
-    let json = Self::fetch_json(rstd::str::from_utf8(&remote_url).unwrap())?;
+    let json = Self::fetch_json(remote_url)?;
 
-    let price = match remote_src.as_slice() {
+    let price = match remote_src {
       src if src == b"coincap" => Self::fetch_price_from_coincap(json)
-        .map_err(|_| "fetch_price_from_coincap error")?,
+        .map_err(|_| "fetch_price_from_coincap error"),
       src if src == b"coinmarketcap" => Self::fetch_price_from_coinmarketcap(json)
-        .map_err(|_| "fetch_price_from_coinmarketcap error")?,
+        .map_err(|_| "fetch_price_from_coinmarketcap error"),
       _ => return Err("Unknown remote source"),
-    };
+    }?;
 
-    let call = Call::record_price((sym, remote_src, remote_url), price);
+    let call = Call::record_price((sym.to_vec(), remote_src.to_vec(), remote_url.to_vec()), price);
     T::SubmitUnsignedTransaction::submit_unsigned(call)
       .map_err(|_| "fetch_price: submit_unsigned_call error")
   }
@@ -277,6 +258,9 @@ impl<T: Trait> Module<T> {
   }
 
   fn aggregate_pp() -> dispatch::Result {
+
+    debug::info!("-- aggregate_pp");
+
     let mut pp_map = BTreeMap::new();
 
     // TODO: calculate the map of sym -> pp
@@ -299,18 +283,21 @@ impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
   fn validate_unsigned(call: &Self::Call) -> TransactionValidity {
     let now = <timestamp::Module<T>>::get();
 
+    debug::info!("validate_unsigned");
+    debug::info!("{:?}", TryInto::<u64>::try_into(now).ok().unwrap());
+
     match call {
-      Call::record_price(..) => Ok(ValidTransaction {
+      Call::record_price((sym, remote_src, ..), price) => Ok(ValidTransaction {
         priority: 0,
         requires: vec![],
-        provides: vec![(now).encode()],
+        provides: vec![(now, sym, remote_src, price).encode()],
         longevity: TransactionLongevity::max_value(),
         propagate: true,
       }),
-      Call::record_agg_pp(..) => Ok(ValidTransaction {
+      Call::record_agg_pp(sym, price) => Ok(ValidTransaction {
         priority: 0,
         requires: vec![],
-        provides: vec![(now).encode()],
+        provides: vec![(now, sym, price).encode()],
         longevity: TransactionLongevity::max_value(),
         propagate: true,
       }),
