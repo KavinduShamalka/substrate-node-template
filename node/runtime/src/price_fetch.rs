@@ -245,16 +245,62 @@ impl<T: Trait> Module<T> {
       .map_err(|_| "fetch_price: submit_unsigned_call error")
   }
 
-  fn fetch_price_from_coincap(_json: JsonValue) -> StdResult<Price> {
-    // TODO: imeplement the logic
-    print_bytes(b"-- fetch_price_from_coincap");
-    Ok(Price::new(100, 3500, None))
+  fn vecchars_to_vecbytes<I: IntoIterator<Item = char> + Clone>(it: &I) -> Vec<u8> {
+    it.clone().into_iter().map(|c| c as u8).collect::<_>()
+  }
+
+  fn round_highest_digits(digits: &[u8], len: usize) -> StdResult<u32> {
+    const ROUND_OFF_BOUNDARY: u32 = 4;
+    // pushing 0 to the end
+    if digits.len() <= len {
+      let mut digits_vec = digits.to_vec();
+      for n in 0..(len - digits.len()) {
+        digits_vec.push(b'0');
+      }
+      return core::str::from_utf8(&digits_vec).unwrap().parse::<u32>()
+        .map_err(|_| "round_highest_digits: parsing to u32 error");
+    }
+    // `digits.len()` > `len`
+    let wanted_digits = digits.get(0..len).unwrap();
+    let last_digit = (digits.get(len..len+1).unwrap()[0] as char).to_digit(10).unwrap();
+    let mut digits_u32 = core::str::from_utf8(wanted_digits).unwrap().parse::<u32>()
+      .map_err(|_| "round_highest_digits: parsing to u32 error")?;
+    if last_digit > ROUND_OFF_BOUNDARY {
+      digits_u32 += 1;
+    }
+    return Ok(digits_u32);
+  }
+
+  fn fetch_price_from_coincap(json_val: JsonValue) -> StdResult<Price> {
+    // This is the expected JSON path:
+    // r#"{"data":{"priceUsd":"8172.2628346190447316"}}"#;
+
+    let data = json_val.get_object()[0].1.get_object();
+    let price_bytes = b"priceUsd";
+
+    let (_, v) = data.iter()
+      .filter(|(k, _)| {
+        let k_bytes = Self::vecchars_to_vecbytes(k);
+        &k_bytes == price_bytes
+      })
+      .nth(0).expect("Should have `priceUsd` field");
+
+    // `val` contains the price, such as "222.333" in bytes form
+    let val: Vec<u8> = v.get_bytes();
+    let dot_pos = val.iter().position(|&i| i == ('.' as u8)).unwrap();
+    let dollars_byte: Vec<u8> = val.get(0..dot_pos).unwrap().to_vec();
+    let cents_byte: Vec<u8> = val.get((dot_pos + 1)..).unwrap().to_vec();
+
+    // Convert to number
+    let dollars_u32: u32 = core::str::from_utf8(&dollars_byte).unwrap()
+      .parse::<u32>().unwrap();
+    let cents_u32: u32 = Self::round_highest_digits(&cents_byte, 4).unwrap();
+    Ok(Price::new(dollars_u32, cents_u32, None))
   }
 
   fn fetch_price_from_coinmarketcap(_json: JsonValue) -> StdResult<Price> {
-    // TODO: imeplement the logic
     print_bytes(b"-- fetch_price_from_coinmarketcap");
-    Ok(Price::new(200, 5000, None))
+    Ok(Price::new(100, 3500, None))
   }
 
   fn aggregate_pp() -> dispatch::Result {
