@@ -12,6 +12,7 @@
 use rstd::{prelude::*, convert::TryInto};
 use primitives::crypto::KeyTypeId;
 use support::{decl_module, decl_storage, decl_event, dispatch, debug};
+use support::traits::Get;
 use system::{ensure_signed, offchain, offchain::SubmitUnsignedTransaction};
 use simple_json::{ self, json::JsonValue };
 
@@ -54,10 +55,6 @@ pub mod crypto {
   app_crypto!(sr25519, KEY_TYPE);
 }
 
-// This automates price fetching every certain blocks. Set to 0 disable this feature.
-//   Then you need to manucally kickoff pricefetch
-pub const BLOCK_FETCH_DUR: u64 = 3;
-
 pub const FETCHED_CRYPTOS: [(&'static [u8], &'static [u8], &'static [u8]); 1] = [
   (b"BTC", b"coincap",
     b"https://api.coincap.io/v2/assets/bitcoin"),
@@ -79,6 +76,10 @@ pub trait Trait: timestamp::Trait + system::Trait {
 
   type SubmitTransaction: offchain::SubmitSignedTransaction<Self, <Self as Trait>::Call>;
   type SubmitUnsignedTransaction: offchain::SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
+
+  // Wait period between automated fetches. Set to 0 disable this feature.
+  //   Then you need to manucally kickoff pricefetch
+  type BlockFetchDur: Get<Self::BlockNumber>;
 }
 
 decl_event!(
@@ -176,10 +177,10 @@ decl_module! {
     }
 
     fn offchain_worker(block: T::BlockNumber) {
-      let current_block = TryInto::<u64>::try_into(block).ok().unwrap();
+      let duration = T::BlockFetchDur::get();
 
       // Type I task: fetch_price
-      if BLOCK_FETCH_DUR > 0 && current_block % BLOCK_FETCH_DUR == 0 {
+      if duration > 0.into() && block % duration == 0.into() {
         for (sym, remote_src, remote_url) in FETCHED_CRYPTOS.iter() {
           if let Err(e) = Self::fetch_price(*sym, *remote_src, *remote_url) {
             debug::error!("Error fetching: {:?}, {:?}: {}", sym, remote_src, e);
