@@ -238,11 +238,17 @@ type SubmitPFTransaction = system::offchain::TransactionSubmitter<
 	Runtime,
 	UncheckedExtrinsic
 >;
+
+parameter_types! {
+	pub const BlockFetchDur: BlockNumber = 3;
+}
+
 impl price_fetch::Trait for Runtime {
 	type Event = Event;
 	type Call = Call;
 	type SubmitTransaction = SubmitPFTransaction;
 	type SubmitUnsignedTransaction = SubmitPFTransaction;
+	type BlockFetchDur = BlockFetchDur;
 }
 
 impl system::offchain::CreateTransaction<Runtime, UncheckedExtrinsic> for Runtime {
