@@ -9,7 +9,7 @@
 /// https://github.com/paritytech/substrate/blob/master/srml/example/src/lib.rs
 
 // We have to import a few things
-use rstd::{prelude::*, collections::btree_map::BTreeMap, convert::TryInto};
+use rstd::{prelude::*, convert::TryInto};
 use primitives::crypto::KeyTypeId;
 use support::{decl_module, decl_storage, decl_event, dispatch, debug};
 use system::{ensure_signed, offchain, offchain::SubmitUnsignedTransaction};
@@ -63,6 +63,8 @@ pub const FETCHED_CRYPTOS: [(&'static [u8], &'static [u8], &'static [u8]); 1] = 
     b"https://api.coincap.io/v2/assets/bitcoin"),
   // (b"BTC", b"coinmarketcap",
   //  b"https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=2e6d8847-bcea-4999-87b1-ad452efe4e40&symbol=BTC"),
+  // (b"BTC", b"cryptocompare",
+  //   b"https://min-api.cryptocompare.com/data/price?fsym=BTC&tsyms=USD"),
   // (b"ETH", b"coincap",
   //  b"https://api.coincap.io/v2/assets/ethereum"),
   // (b"ETH", b"coinmarketcap",
@@ -91,21 +93,21 @@ decl_event!(
 // This module's storage items.
 decl_storage! {
   trait Store for Module<T: Trait> as PriceFetch {
-    UpdateAggPP get(update_agg_pp): bool;
+    UpdateAggPP get(update_agg_pp): linked_map Vec<u8> => bool = false;
 
     // storage about source price points
-    // mapping of ID(index) -> (timestamp, price_obj)
+    // mapping of ID(index) -> (timestamp, `Price` obj)
     SrcPricePoints get(src_price_pts): Vec<(T::Moment, Price)>;
 
     // mapping of token sym -> pp_id
-    TokenSrcPPMap: map Vec<u8> => Vec<u64>;
+    TokenSrcPPMap: map Vec<u8> => Vec<u32>;
 
     // mapping of remote_src -> pp_id
-    RemoteSrcPPMap: map Vec<u8> => Vec<u64>;
+    RemoteSrcPPMap: map Vec<u8> => Vec<u32>;
 
-    // storage about aggregated price points (calculated in our logic)
+    // storage about aggregated price points (calculated with our logic)
     AggPricePoints get(agg_price_pts): Vec<(T::Moment, Price)>;
-    TokenAggPPMap: map Vec<u8> => Vec<u64>;
+    TokenAggPPMap: map Vec<u8> => Vec<u32>;
   }
 }
 
@@ -117,48 +119,45 @@ decl_module! {
     // this is needed only if you are using events in your module
     fn deposit_event() = default;
 
-    // Clean the state on initialization of the block
-    fn on_initialize(block: T::BlockNumber) {}
-
     pub fn record_price(
       origin,
       crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>),
       price: Price
     ) -> dispatch::Result {
-      let (symbol, remote_src) = (crypto_info.0, crypto_info.1);
+      let (sym, remote_src) = (crypto_info.0, crypto_info.1);
       let now = <timestamp::Module<T>>::get();
 
       // Debug printout
       debug::info!("-- record_price: {:?}, {:?}, {:?}",
-        core::str::from_utf8(&symbol).unwrap(),
+        core::str::from_utf8(&sym).unwrap(),
         core::str::from_utf8(&remote_src).unwrap(),
         price
       );
 
       // Spit out an event and Add to storage
       Self::deposit_event(RawEvent::PriceFetched(
-        symbol.clone(), remote_src.clone(), now.clone(), price.clone()));
+        sym.clone(), remote_src.clone(), now.clone(), price.clone()));
 
       let price_pt = (now, price);
       // The index serves as the ID
-      let pp_id: u64 = Self::src_price_pts().len().try_into().unwrap();
+      let pp_id: u32 = Self::src_price_pts().len().try_into().unwrap();
       <SrcPricePoints<T>>::mutate(|vec| vec.push(price_pt));
-      <TokenSrcPPMap>::mutate(symbol, |token_vec| token_vec.push(pp_id));
+      <TokenSrcPPMap>::mutate(sym.clone(), |token_vec| token_vec.push(pp_id));
       <RemoteSrcPPMap>::mutate(remote_src, |rs_vec| rs_vec.push(pp_id));
 
-      // set the flag to kick off update aggregated pricing
-      <UpdateAggPP>::mutate(|flag| *flag = true);
+      // set the flag to kick off update aggregated pricing in offchain call
+      <UpdateAggPP>::mutate(sym.clone(), |flag| *flag = true);
 
       Ok(())
     }
 
     pub fn record_agg_pp(origin, sym: Vec<u8>, price: Price) -> dispatch::Result {
       // Debug printout
-      debug::info!("-- record_agg_pp: called");
+      debug::info!("-- record_agg_pp: {}: {:?}",
+        core::str::from_utf8(&sym).unwrap(),
+        price);
 
       let now = <timestamp::Module<T>>::get();
-      // Turn off the flag for request has been handled
-      <UpdateAggPP>::mutate(|flag| *flag = false);
 
       // Spit the event
       Self::deposit_event(RawEvent::AggregatedPrice(
@@ -166,9 +165,12 @@ decl_module! {
 
       // Record in the storage
       let price_pt = (now.clone(), price.clone());
-      let pp_id: u64 = Self::agg_price_pts().len().try_into().unwrap();
+      let pp_id: u32 = Self::agg_price_pts().len().try_into().unwrap();
       <AggPricePoints<T>>::mutate(|vec| vec.push(price_pt));
-      <TokenAggPPMap>::mutate(sym, |vec| vec.push(pp_id));
+      <TokenAggPPMap>::mutate(sym.clone(), |vec| vec.push(pp_id));
+
+      // Turn off the flag as the request has been handled
+      <UpdateAggPP>::mutate(sym.clone(), |flag| *flag = false);
 
       Ok(())
     }
@@ -186,11 +188,15 @@ decl_module! {
       }
 
       // Type II task: aggregate price
-      if Self::update_agg_pp() {
-        if let Err(e) = Self::aggregate_pp() {
-          debug::error!("Error aggregating price: {}", e);
-        }
-      }
+      <UpdateAggPP>::enumerate()
+        // filter those to be updated
+        .filter(|(_, update)| *update)
+        .for_each(|(sym, _)| {
+          if let Err(e) = Self::aggregate_pp(&sym) {
+            debug::error!("Error aggregating price of {:?}: {}",
+              core::str::from_utf8(&sym).unwrap(), e);
+          }
+        });
     } // end of `fn offchain_worker()`
 
   }
@@ -303,22 +309,22 @@ impl<T: Trait> Module<T> {
     Ok(Price::new(100, 3500, None))
   }
 
-  fn aggregate_pp() -> dispatch::Result {
+  fn aggregate_pp<'a>(sym: &'a [u8]) -> dispatch::Result {
+    // TODO: enhance the aggregation logic
+    //   Currently, fetch the last price point of the token and use as its aggregated price
+    let ts_pp_vec = <TokenSrcPPMap>::get(sym);
+    let pp_id: usize = *ts_pp_vec.last().unwrap() as usize;
 
-    debug::info!("-- aggregate_pp");
+    let src_pp_vec = Self::src_price_pts();
+    let price = src_pp_vec[pp_id].1.clone();
 
-    let mut pp_map = BTreeMap::new();
+    debug::info!("-- aggregate_pp: {}, {:?}",
+      core::str::from_utf8(sym).unwrap(), price);
 
-    // TODO: calculate the map of sym -> pp
-    pp_map.insert(b"BTC".to_vec(), Price::new(100, 3500, None));
-
-    pp_map.iter().for_each(|(sym, price)| {
-      let call = Call::record_agg_pp(sym.clone(), price.clone());
-      if let Err(_) = T::SubmitUnsignedTransaction::submit_unsigned(call) {
-        debug::error!("aggregate_pp: submit_unsigned_call error");
-      }
-    });
-    Ok(())
+    // submit onchain call for aggregating the price
+    let call = Call::record_agg_pp(sym.to_vec(), price);
+    T::SubmitUnsignedTransaction::submit_unsigned(call)
+      .map_err(|_| "aggregate_pp: submit_unsigned_call error")
   }
 }
 
