@@ -58,13 +58,19 @@ pub mod crypto {
 //   Then you need to manucally kickoff pricefetch
 pub const BLOCK_FETCH_DUR: u64 = 3;
 
-pub const FETCHED_CRYPTOS: [(&'static [u8], &'static [u8], &'static [u8]); 1] = [
+pub const FETCHED_CRYPTOS: [(&'static [u8], &'static [u8], &'static [u8]); 3] = [
+  (b"BTC", b"coincap",
+    b"https://api.coincap.io/v2/assets/bitcoin"),
+  (b"BTC", b"coincap",
+    b"https://api.coincap.io/v2/assets/bitcoin"),
   (b"BTC", b"coincap",
     b"https://api.coincap.io/v2/assets/bitcoin"),
   // (b"BTC", b"coinmarketcap",
-  //  b"https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=2e6d8847-bcea-4999-87b1-ad452efe4e40&symbol=BTC"),
+  //  b"https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=7ae12f6d-2a7b-422c-a05a-ff2e312dc867&symbol=BTC"),
   // (b"BTC", b"cryptocompare",
   //   b"https://min-api.cryptocompare.com/data/price?fsym=BTC&tsyms=USD"),
+  // (b"BTC", b"coinmarketcap",
+  //  b"https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=2e6d8847-bcea-4999-87b1-ad452efe4e40&symbol=BTC"),
   // (b"ETH", b"coincap",
   //  b"https://api.coincap.io/v2/assets/ethereum"),
   // (b"ETH", b"coinmarketcap",
@@ -93,7 +99,7 @@ decl_event!(
 // This module's storage items.
 decl_storage! {
   trait Store for Module<T: Trait> as PriceFetch {
-    UpdateAggPP get(update_agg_pp): linked_map Vec<u8> => bool = false;
+    UpdateAggPP get(update_agg_pp): linked_map Vec<u8> => u32 = 0;
 
     // storage about source price points
     // mapping of ID(index) -> (timestamp, `Price` obj)
@@ -146,7 +152,7 @@ decl_module! {
       <RemoteSrcPPMap>::mutate(remote_src, |rs_vec| rs_vec.push(pp_id));
 
       // set the flag to kick off update aggregated pricing in offchain call
-      <UpdateAggPP>::mutate(sym.clone(), |flag| *flag = true);
+      <UpdateAggPP>::mutate(sym.clone(), |freq| *freq += 1);
 
       Ok(())
     }
@@ -170,7 +176,7 @@ decl_module! {
       <TokenAggPPMap>::mutate(sym.clone(), |vec| vec.push(pp_id));
 
       // Turn off the flag as the request has been handled
-      <UpdateAggPP>::mutate(sym.clone(), |flag| *flag = false);
+      <UpdateAggPP>::mutate(sym.clone(), |freq| *freq = 0);
 
       Ok(())
     }
@@ -190,9 +196,9 @@ decl_module! {
       // Type II task: aggregate price
       <UpdateAggPP>::enumerate()
         // filter those to be updated
-        .filter(|(_, update)| *update)
-        .for_each(|(sym, _)| {
-          if let Err(e) = Self::aggregate_pp(&sym) {
+        .filter(|(_, freq)| *freq > 0)
+        .for_each(|(sym, freq)| {
+          if let Err(e) = Self::aggregate_pp(&sym, freq) {
             debug::error!("Error aggregating price of {:?}: {}",
               core::str::from_utf8(&sym).unwrap(), e);
           }
@@ -309,14 +315,16 @@ impl<T: Trait> Module<T> {
     Ok(Price::new(100, 3500, None))
   }
 
-  fn aggregate_pp<'a>(sym: &'a [u8]) -> dispatch::Result {
-    // TODO: enhance the aggregation logic
-    //   Currently, fetch the last price point of the token and use as its aggregated price
+  fn aggregate_pp<'a>(sym: &'a [u8], freq: u32) -> dispatch::Result {
     let ts_pp_vec = <TokenSrcPPMap>::get(sym);
-    let pp_id: usize = *ts_pp_vec.last().unwrap() as usize;
+
+    // use the last `freq` number of prices and average them
+    let amt: f64 = if ts_pp_vec.len() > freq { freq } else { ts_pp_vec.len() }
+    let pp_inds: &usize = ts_pp_vec.get((ts_pp_vec.len() - amt)..ts_pp_vec.len());
 
     let src_pp_vec = Self::src_price_pts();
-    let price = src_pp_vec[pp_id].1.clone();
+    let price_sum = pp_inds.fold(0, |mem, ind| mem + src_pp_vec[ind].1);
+    let price = price_sum / amt;
 
     debug::info!("-- aggregate_pp: {}, {:?}",
       core::str::from_utf8(sym).unwrap(), price);
