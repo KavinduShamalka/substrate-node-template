@@ -4,7 +4,6 @@
 /// If you change the name of this file, make sure to update its references in runtime/src/lib.rs
 /// If you remove this file, you can remove those references
 
-
 /// For more guidance on Substrate modules, see the example module
 /// https://github.com/paritytech/substrate/blob/master/srml/example/src/lib.rs
 
@@ -17,6 +16,7 @@ use simple_json::{ self, json::JsonValue };
 
 use runtime_io::{ self, misc::print_utf8 as print_bytes };
 use codec::{Encode, Decode};
+use num_traits::float::FloatCore;
 use sp_runtime::{
   offchain::http,
   transaction_validity::{
@@ -25,22 +25,6 @@ use sp_runtime::{
 };
 
 type StdResult<T> = core::result::Result<T, &'static str>;
-
-#[derive(Debug, Encode, Decode, Clone, PartialEq, Eq)]
-pub struct Price {
-  dollars: u32,
-  cents: u32, // up to 4 digits
-  currency: Vec<u8>,
-}
-
-impl Price {
-  fn new(dollars: u32, cents: u32, currency: Option<Vec<u8>>) -> Price {
-    match currency {
-      Some(curr) => Price{dollars, cents, currency: curr},
-      None => Price{dollars, cents, currency: b"usd".to_vec()}
-    }
-  }
-}
 
 /// Our local KeyType.
 ///
@@ -91,8 +75,8 @@ decl_event!(
   pub enum Event<T> where
     Moment = <T as timestamp::Trait>::Moment {
 
-    PriceFetched(Vec<u8>, Vec<u8>, Moment, Price),
-    AggregatedPrice(Vec<u8>, Moment, Price),
+    FetchedPrice(Vec<u8>, Vec<u8>, Moment, u64),
+    AggregatedPrice(Vec<u8>, Moment, u64),
   }
 );
 
@@ -102,17 +86,19 @@ decl_storage! {
     UpdateAggPP get(update_agg_pp): linked_map Vec<u8> => u32 = 0;
 
     // storage about source price points
-    // mapping of ID(index) -> (timestamp, `Price` obj)
-    SrcPricePoints get(src_price_pts): Vec<(T::Moment, Price)>;
+    // mapping of ind -> (timestamp, price)
+    //   price has been inflated by 10,000, and in USD.
+    //   When used, it should be divided by 10,000.
+    SrcPricePoints get(src_price_pts): Vec<(T::Moment, u64)>;
 
-    // mapping of token sym -> pp_id
+    // mapping of token sym -> pp_ind
     TokenSrcPPMap: map Vec<u8> => Vec<u32>;
 
-    // mapping of remote_src -> pp_id
+    // mapping of remote_src -> pp_ind
     RemoteSrcPPMap: map Vec<u8> => Vec<u32>;
 
     // storage about aggregated price points (calculated with our logic)
-    AggPricePoints get(agg_price_pts): Vec<(T::Moment, Price)>;
+    AggPricePoints get(agg_price_pts): Vec<(T::Moment, u64)>;
     TokenAggPPMap: map Vec<u8> => Vec<u32>;
   }
 }
@@ -128,7 +114,7 @@ decl_module! {
     pub fn record_price(
       origin,
       crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>),
-      price: Price
+      price: u64
     ) -> dispatch::Result {
       let (sym, remote_src) = (crypto_info.0, crypto_info.1);
       let now = <timestamp::Module<T>>::get();
@@ -141,8 +127,8 @@ decl_module! {
       );
 
       // Spit out an event and Add to storage
-      Self::deposit_event(RawEvent::PriceFetched(
-        sym.clone(), remote_src.clone(), now.clone(), price.clone()));
+      Self::deposit_event(RawEvent::FetchedPrice(
+        sym.clone(), remote_src.clone(), now.clone(), price));
 
       let price_pt = (now, price);
       // The index serves as the ID
@@ -157,11 +143,12 @@ decl_module! {
       Ok(())
     }
 
-    pub fn record_agg_pp(origin, sym: Vec<u8>, price: Price) -> dispatch::Result {
+    pub fn record_agg_pp(origin, sym: Vec<u8>, price: u64) -> dispatch::Result {
       // Debug printout
       debug::info!("-- record_agg_pp: {}: {:?}",
         core::str::from_utf8(&sym).unwrap(),
-        price);
+        price
+      );
 
       let now = <timestamp::Module<T>>::get();
 
@@ -188,7 +175,10 @@ decl_module! {
       if BLOCK_FETCH_DUR > 0 && current_block % BLOCK_FETCH_DUR == 0 {
         for (sym, remote_src, remote_url) in FETCHED_CRYPTOS.iter() {
           if let Err(e) = Self::fetch_price(*sym, *remote_src, *remote_url) {
-            debug::error!("Error fetching: {:?}, {:?}: {}", sym, remote_src, e);
+            debug::error!("Error fetching: {:?}, {:?}: {}",
+              core::str::from_utf8(sym).unwrap(),
+              core::str::from_utf8(remote_src).unwrap(),
+              e);
           }
         }
       }
@@ -198,7 +188,7 @@ decl_module! {
         // filter those to be updated
         .filter(|(_, freq)| *freq > 0)
         .for_each(|(sym, freq)| {
-          if let Err(e) = Self::aggregate_pp(&sym, freq) {
+          if let Err(e) = Self::aggregate_pp(&sym, freq as usize) {
             debug::error!("Error aggregating price of {:?}: {}",
               core::str::from_utf8(&sym).unwrap(), e);
           }
@@ -249,7 +239,7 @@ impl<T: Trait> Module<T> {
         .map_err(|_| "fetch_price_from_coincap error"),
       src if src == b"coinmarketcap" => Self::fetch_price_from_coinmarketcap(json)
         .map_err(|_| "fetch_price_from_coinmarketcap error"),
-      _ => return Err("Unknown remote source"),
+      _ => Err("Unknown remote source"),
     }?;
 
     let call = Call::record_price((sym.to_vec(), remote_src.to_vec(), remote_url.to_vec()), price);
@@ -261,76 +251,51 @@ impl<T: Trait> Module<T> {
     it.clone().into_iter().map(|c| c as u8).collect::<_>()
   }
 
-  fn round_highest_digits(digits: &[u8], len: usize) -> StdResult<u32> {
-    const ROUND_OFF_BOUNDARY: u32 = 4;
-    // pushing 0 to the end
-    if digits.len() <= len {
-      let mut digits_vec = digits.to_vec();
-      for n in 0..(len - digits.len()) {
-        digits_vec.push(b'0');
-      }
-      return core::str::from_utf8(&digits_vec).unwrap().parse::<u32>()
-        .map_err(|_| "round_highest_digits: parsing to u32 error");
-    }
-    // `digits.len()` > `len`
-    let wanted_digits = digits.get(0..len).unwrap();
-    let last_digit = (digits.get(len..len+1).unwrap()[0] as char).to_digit(10).unwrap();
-    let mut digits_u32 = core::str::from_utf8(wanted_digits).unwrap().parse::<u32>()
-      .map_err(|_| "round_highest_digits: parsing to u32 error")?;
-    if last_digit > ROUND_OFF_BOUNDARY {
-      digits_u32 += 1;
-    }
-    return Ok(digits_u32);
-  }
-
-  fn fetch_price_from_coincap(json_val: JsonValue) -> StdResult<Price> {
-    // This is the expected JSON path:
+  fn fetch_price_from_coincap(json_val: JsonValue) -> StdResult<u64> {
+    // This is the expected JSON shape:
     // r#"{"data":{"priceUsd":"8172.2628346190447316"}}"#;
 
+    const PRICE_KEY: &[u8] = b"priceUsd";
     let data = json_val.get_object()[0].1.get_object();
-    let price_bytes = b"priceUsd";
 
     let (_, v) = data.iter()
-      .filter(|(k, _)| {
-        let k_bytes = Self::vecchars_to_vecbytes(k);
-        &k_bytes == price_bytes
-      })
-      .nth(0).expect("Should have `priceUsd` field");
+      .filter(|(k, _)| PRICE_KEY.to_vec() == Self::vecchars_to_vecbytes(k))
+      .nth(0)
+      .ok_or("fetch_price_from_coincap: JSON does not conform to expectation")?;
 
     // `val` contains the price, such as "222.333" in bytes form
-    let val: Vec<u8> = v.get_bytes();
-    let dot_pos = val.iter().position(|&i| i == ('.' as u8)).unwrap();
-    let dollars_byte: Vec<u8> = val.get(0..dot_pos).unwrap().to_vec();
-    let cents_byte: Vec<u8> = val.get((dot_pos + 1)..).unwrap().to_vec();
+    let val_u8: Vec<u8> = v.get_bytes();
 
     // Convert to number
-    let dollars_u32: u32 = core::str::from_utf8(&dollars_byte).unwrap()
-      .parse::<u32>().unwrap();
-    let cents_u32: u32 = Self::round_highest_digits(&cents_byte, 4).unwrap();
-    Ok(Price::new(dollars_u32, cents_u32, None))
+    let val_f64: f64 = core::str::from_utf8(&val_u8)
+      .map_err(|_| "fetch_price_from_coincap: val_f64 convert to string error")?
+      .parse::<f64>()
+      .map_err(|_| "fetch_price_from_coincap: val_u8 parsing to f64 error")?;
+    let val_u64 = (val_f64 * 10000.).round() as u64;
+    Ok(val_u64)
   }
 
-  fn fetch_price_from_coinmarketcap(_json: JsonValue) -> StdResult<Price> {
-    print_bytes(b"-- fetch_price_from_coinmarketcap");
-    Ok(Price::new(100, 3500, None))
+  fn fetch_price_from_coinmarketcap(_json: JsonValue) -> StdResult<u64> {
+    Ok(1003500)
   }
 
-  fn aggregate_pp<'a>(sym: &'a [u8], freq: u32) -> dispatch::Result {
+  fn aggregate_pp<'a>(sym: &'a [u8], freq: usize) -> dispatch::Result {
     let ts_pp_vec = <TokenSrcPPMap>::get(sym);
 
     // use the last `freq` number of prices and average them
-    let amt: f64 = if ts_pp_vec.len() > freq { freq } else { ts_pp_vec.len() }
-    let pp_inds: &usize = ts_pp_vec.get((ts_pp_vec.len() - amt)..ts_pp_vec.len());
+    let amt: usize = if ts_pp_vec.len() > freq { freq } else { ts_pp_vec.len() };
+    let pp_inds: &[u32] = ts_pp_vec.get((ts_pp_vec.len() - amt)..ts_pp_vec.len())
+      .ok_or("aggregate_pp: extracting TokenSrcPPMap error")?;
 
-    let src_pp_vec = Self::src_price_pts();
-    let price_sum = pp_inds.fold(0, |mem, ind| mem + src_pp_vec[ind].1);
-    let price = price_sum / amt;
+    let src_pp_vec: Vec<_> = Self::src_price_pts();
+    let price_sum: u64 = pp_inds.iter().fold(0, |mem, ind| mem + src_pp_vec[*ind as usize].1);
+    let price_avg: u64 = (price_sum as f64 / amt as f64).round() as u64;
 
     debug::info!("-- aggregate_pp: {}, {:?}",
-      core::str::from_utf8(sym).unwrap(), price);
+      core::str::from_utf8(sym).unwrap(), price_avg);
 
     // submit onchain call for aggregating the price
-    let call = Call::record_agg_pp(sym.to_vec(), price);
+    let call = Call::record_agg_pp(sym.to_vec(), price_avg);
     T::SubmitUnsignedTransaction::submit_unsigned(call)
       .map_err(|_| "aggregate_pp: submit_unsigned_call error")
   }

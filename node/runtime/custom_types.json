@@ -1,7 +1,6 @@
 {
   "Price": {
-    "dollars": "u32",
-    "cents": "u32",
+    "val": "u64",
     "currency": "Vec<u8>"
   }
 }
