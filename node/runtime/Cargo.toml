@@ -152,7 +152,7 @@ default-features = false
 
 [dependencies.simple-json]
 git = 'https://github.com/jimmychu0807/simple-json'
-version = '0.1.4'
+version = '0.1.5'
 default_features = false
 
 [build-dependencies.wasm-builder-runner]

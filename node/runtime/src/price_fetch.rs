@@ -15,7 +15,7 @@ use system::{ensure_signed, offchain, offchain::SubmitUnsignedTransaction};
 use simple_json::{ self, json::JsonValue };
 
 use runtime_io::{ self, misc::print_utf8 as print_bytes };
-use codec::{Encode, Decode};
+use codec::{ Encode };
 use num_traits::float::FloatCore;
 use sp_runtime::{
   offchain::http,
@@ -31,6 +31,7 @@ type StdResult<T> = core::result::Result<T, &'static str>;
 /// For security reasons the offchain worker doesn't have direct access to the keys
 /// but only to app-specific subkeys, which are defined and grouped by their `KeyTypeId`.
 pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"ofpf");
+pub const MAX_VEC_LEN: usize = 1000;
 
 pub mod crypto {
   pub use super::KEY_TYPE;
@@ -38,27 +39,15 @@ pub mod crypto {
   app_crypto!(sr25519, KEY_TYPE);
 }
 
-// This automates price fetching every certain blocks. Set to 0 disable this feature.
-//   Then you need to manucally kickoff pricefetch
-pub const BLOCK_FETCH_DUR: u64 = 3;
-
-pub const FETCHED_CRYPTOS: [(&'static [u8], &'static [u8], &'static [u8]); 3] = [
+pub const FETCHED_CRYPTOS: [(&[u8], &[u8], &[u8]); 4] = [
   (b"BTC", b"coincap",
     b"https://api.coincap.io/v2/assets/bitcoin"),
-  (b"BTC", b"coincap",
-    b"https://api.coincap.io/v2/assets/bitcoin"),
-  (b"BTC", b"coincap",
-    b"https://api.coincap.io/v2/assets/bitcoin"),
-  // (b"BTC", b"coinmarketcap",
-  //  b"https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=7ae12f6d-2a7b-422c-a05a-ff2e312dc867&symbol=BTC"),
-  // (b"BTC", b"cryptocompare",
-  //   b"https://min-api.cryptocompare.com/data/price?fsym=BTC&tsyms=USD"),
-  // (b"BTC", b"coinmarketcap",
-  //  b"https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=2e6d8847-bcea-4999-87b1-ad452efe4e40&symbol=BTC"),
-  // (b"ETH", b"coincap",
-  //  b"https://api.coincap.io/v2/assets/ethereum"),
-  // (b"ETH", b"coinmarketcap",
-  //  b"https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?CMC_PRO_API_KEY=2e6d8847-bcea-4999-87b1-ad452efe4e40&symbol=ETH"),
+  (b"BTC", b"cryptocompare",
+    b"https://min-api.cryptocompare.com/data/price?fsym=BTC&tsyms=USD"),
+  (b"ETH", b"coincap",
+   b"https://api.coincap.io/v2/assets/ethereum"),
+  (b"ETH", b"cryptocompare",
+    b"https://min-api.cryptocompare.com/data/price?fsym=ETH&tsyms=USD"),
 ];
 
 /// The module's configuration trait.
@@ -124,7 +113,7 @@ decl_module! {
       let now = <timestamp::Module<T>>::get();
 
       // Debug printout
-      debug::info!("-- record_price: {:?}, {:?}, {:?}",
+      debug::info!("record_price: {:?}, {:?}, {:?}",
         core::str::from_utf8(&sym).unwrap(),
         core::str::from_utf8(&remote_src).unwrap(),
         price
@@ -149,7 +138,7 @@ decl_module! {
 
     pub fn record_agg_pp(origin, sym: Vec<u8>, price: u64) -> dispatch::Result {
       // Debug printout
-      debug::info!("-- record_agg_pp: {}: {:?}",
+      debug::info!("record_agg_pp: {}: {:?}",
         core::str::from_utf8(&sym).unwrap(),
         price
       );
@@ -241,8 +230,8 @@ impl<T: Trait> Module<T> {
     let price = match remote_src {
       src if src == b"coincap" => Self::fetch_price_from_coincap(json)
         .map_err(|_| "fetch_price_from_coincap error"),
-      src if src == b"coinmarketcap" => Self::fetch_price_from_coinmarketcap(json)
-        .map_err(|_| "fetch_price_from_coinmarketcap error"),
+      src if src == b"cryptocompare" => Self::fetch_price_from_cryptocompare(json)
+        .map_err(|_| "fetch_price_from_cryptocompare error"),
       _ => Err("Unknown remote source"),
     }?;
 
@@ -255,9 +244,18 @@ impl<T: Trait> Module<T> {
     it.clone().into_iter().map(|c| c as u8).collect::<_>()
   }
 
+  fn fetch_price_from_cryptocompare(json_val: JsonValue) -> StdResult<u64> {
+    // Expected JSON shape:
+    //   r#"{"USD": 7064.16}"#;
+
+    let val_f64: f64 = json_val.get_object()[0].1.get_number_f64();
+    let val_u64: u64 = (val_f64 * 10000.).round() as u64;
+    Ok(val_u64)
+  }
+
   fn fetch_price_from_coincap(json_val: JsonValue) -> StdResult<u64> {
-    // This is the expected JSON shape:
-    // r#"{"data":{"priceUsd":"8172.2628346190447316"}}"#;
+    // Expected JSON shape:
+    //   r#"{"data":{"priceUsd":"8172.2628346190447316"}}"#;
 
     const PRICE_KEY: &[u8] = b"priceUsd";
     let data = json_val.get_object()[0].1.get_object();
@@ -279,10 +277,6 @@ impl<T: Trait> Module<T> {
     Ok(val_u64)
   }
 
-  fn fetch_price_from_coinmarketcap(_json: JsonValue) -> StdResult<u64> {
-    Ok(1003500)
-  }
-
   fn aggregate_pp<'a>(sym: &'a [u8], freq: usize) -> dispatch::Result {
     let ts_pp_vec = <TokenSrcPPMap>::get(sym);
 
@@ -294,9 +288,6 @@ impl<T: Trait> Module<T> {
     let src_pp_vec: Vec<_> = Self::src_price_pts();
     let price_sum: u64 = pp_inds.iter().fold(0, |mem, ind| mem + src_pp_vec[*ind as usize].1);
     let price_avg: u64 = (price_sum as f64 / amt as f64).round() as u64;
-
-    debug::info!("-- aggregate_pp: {}, {:?}",
-      core::str::from_utf8(sym).unwrap(), price_avg);
 
     // submit onchain call for aggregating the price
     let call = Call::record_agg_pp(sym.to_vec(), price_avg);
@@ -311,9 +302,6 @@ impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
 
   fn validate_unsigned(call: &Self::Call) -> TransactionValidity {
     let now = <timestamp::Module<T>>::get();
-
-    debug::info!("validate_unsigned");
-    debug::info!("{:?}", TryInto::<u64>::try_into(now).ok().unwrap());
 
     match call {
       Call::record_price((sym, remote_src, ..), price) => Ok(ValidTransaction {

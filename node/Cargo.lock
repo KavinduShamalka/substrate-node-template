@@ -3256,7 +3256,7 @@ dependencies = [
  "parity-scale-codec 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "safe-mix 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.103 (registry+https://github.com/rust-lang/crates.io-index)",
- "simple-json 0.1.4 (git+https://github.com/jimmychu0807/simple-json)",
+ "simple-json 0.1.5 (git+https://github.com/jimmychu0807/simple-json)",
  "sp-api 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306)",
  "sp-block-builder 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306)",
  "sp-consensus-aura 2.0.0 (git+https://github.com/paritytech/substrate.git?rev=dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306)",
@@ -4060,9 +4060,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "simple-json"
-version = "0.1.4"
-source = "git+https://github.com/jimmychu0807/simple-json#46a9784d61679273bfde937cfeae4a4ea24aedf7"
+version = "0.1.5"
+source = "git+https://github.com/jimmychu0807/simple-json#e5e51a2733a9de76aa6afad30b46cbafa509a13d"
 dependencies = [
+ "num-traits 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "paste 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -6000,7 +6001,7 @@ dependencies = [
 "checksum sha3 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)" = "dd26bc0e7a2e3a7c959bc494caf58b72ee0c71d67704e9520f736ca7e4853ecf"
 "checksum shell32-sys 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "9ee04b46101f57121c9da2b151988283b6beb79b34f5bb29a58ee48cb695122c"
 "checksum shlex 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "7fdf1b9db47230893d76faad238fd6097fd6d6a9245cd7a4d90dbd639536bbd2"
-"checksum simple-json 0.1.4 (git+https://github.com/jimmychu0807/simple-json)" = "<none>"
+"checksum simple-json 0.1.5 (git+https://github.com/jimmychu0807/simple-json)" = "<none>"
 "checksum slab 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)" = "c111b5bd5695e56cffe5129854aa230b39c93a305372fdbb2668ca2394eea9f8"
 "checksum slog 2.5.2 (registry+https://github.com/rust-lang/crates.io-index)" = "1cc9c640a4adbfbcc11ffb95efe5aa7af7309e002adab54b185507dbf2377b99"
 "checksum slog-async 2.3.0 (git+https://github.com/paritytech/slog-async)" = "<none>"
