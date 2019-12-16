@@ -11,7 +11,9 @@
 use rstd::{prelude::*, convert::TryInto};
 use primitives::crypto::KeyTypeId;
 use support::{decl_module, decl_storage, decl_event, dispatch, debug, traits::Get};
-use system::{ensure_signed, offchain, offchain::SubmitUnsignedTransaction};
+use system::{ ensure_signed, offchain,
+  offchain::SubmitSignedTransaction,
+  offchain::SignAndSubmitTransaction };
 use simple_json::{ self, json::JsonValue };
 
 use runtime_io::{ self, misc::print_utf8 as print_bytes };
@@ -31,6 +33,9 @@ type StdResult<T> = core::result::Result<T, &'static str>;
 /// For security reasons the offchain worker doesn't have direct access to the keys
 /// but only to app-specific subkeys, which are defined and grouped by their `KeyTypeId`.
 pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"ofpf");
+
+// REVIEW-CHECK: is it necessary to turn-around at vector `MAX_VEC_LEN`th index and use back
+//   zeroth index again?
 pub const MAX_VEC_LEN: usize = 1000;
 
 pub mod crypto {
@@ -57,6 +62,7 @@ pub trait Trait: timestamp::Trait + system::Trait {
   type Call: From<Call<Self>>;
 
   type SubmitTransaction: offchain::SubmitSignedTransaction<Self, <Self as Trait>::Call>;
+  type SignAndSubmitTransaction: offchain::SignAndSubmitTransaction<Self, <Self as Trait>::Call>;
   type SubmitUnsignedTransaction: offchain::SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
 
   // Wait period between automated fetches. Set to 0 disable this feature.
@@ -129,6 +135,9 @@ decl_module! {
       <SrcPricePoints<T>>::mutate(|vec| vec.push(price_pt));
       <TokenSrcPPMap>::mutate(sym.clone(), |token_vec| token_vec.push(pp_id));
       <RemoteSrcPPMap>::mutate(remote_src, |rs_vec| rs_vec.push(pp_id));
+
+      // REVIEW-CHECK: should I set check vector len reach max length and remove the earliest
+      //   price point? Do not want to shift index/re-index.
 
       // set the flag to kick off update aggregated pricing in offchain call
       <UpdateAggPP>::mutate(sym.clone(), |freq| *freq += 1);
@@ -236,8 +245,19 @@ impl<T: Trait> Module<T> {
     }?;
 
     let call = Call::record_price((sym.to_vec(), remote_src.to_vec(), remote_url.to_vec()), price);
-    T::SubmitUnsignedTransaction::submit_unsigned(call)
-      .map_err(|_| "fetch_price: submit_unsigned_call error")
+
+    // Unsigned tx
+    // T::SubmitUnsignedTransaction::submit_unsigned(call)
+    //   .map_err(|_| "fetch_price: submit_signed(call) error")
+    // Signed tx
+
+    let local_accts = T::SubmitTransaction::find_local_keys(None);
+    let (local_acct, local_key) = local_accts[0];
+    debug::info!("acct: {:?}", local_acct);
+
+    // T::SignAndSubmitTransaction::submit_signed(call);
+    T::SignAndSubmitTransaction::sign_and_submit(call, local_key);
+    Ok(())
   }
 
   fn vecchars_to_vecbytes<I: IntoIterator<Item = char> + Clone>(it: &I) -> Vec<u8> {
@@ -291,8 +311,13 @@ impl<T: Trait> Module<T> {
 
     // submit onchain call for aggregating the price
     let call = Call::record_agg_pp(sym.to_vec(), price_avg);
-    T::SubmitUnsignedTransaction::submit_unsigned(call)
-      .map_err(|_| "aggregate_pp: submit_unsigned_call error")
+
+    // Unsigned tx
+    // T::SubmitUnsignedTransaction::submit_unsigned(call)
+    //   .map_err(|_| "aggregate_pp: submit_signed(call) error")
+    // Signed tx
+    T::SubmitTransaction::submit_signed(call);
+    Ok(())
   }
 }
 
