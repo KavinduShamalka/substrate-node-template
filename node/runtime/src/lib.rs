@@ -246,7 +246,7 @@ parameter_types! {
 impl price_fetch::Trait for Runtime {
 	type Event = Event;
 	type Call = Call;
-	type SubmitTransaction = SubmitPFTransaction;
+	type SubmitSignedTransaction = SubmitPFTransaction;
 	type SignAndSubmitTransaction = SubmitPFTransaction;
 	type SubmitUnsignedTransaction = SubmitPFTransaction;
 	type BlockFetchDur = BlockFetchDur;

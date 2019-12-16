@@ -13,6 +13,7 @@ use primitives::crypto::KeyTypeId;
 use support::{decl_module, decl_storage, decl_event, dispatch, debug, traits::Get};
 use system::{ ensure_signed, offchain,
   offchain::SubmitSignedTransaction,
+  offchain::SubmitUnsignedTransaction,
   offchain::SignAndSubmitTransaction };
 use simple_json::{ self, json::JsonValue };
 
@@ -61,7 +62,7 @@ pub trait Trait: timestamp::Trait + system::Trait {
   type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
   type Call: From<Call<Self>>;
 
-  type SubmitTransaction: offchain::SubmitSignedTransaction<Self, <Self as Trait>::Call>;
+  type SubmitSignedTransaction: offchain::SubmitSignedTransaction<Self, <Self as Trait>::Call>;
   type SignAndSubmitTransaction: offchain::SignAndSubmitTransaction<Self, <Self as Trait>::Call>;
   type SubmitUnsignedTransaction: offchain::SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
 
@@ -249,14 +250,14 @@ impl<T: Trait> Module<T> {
     // Unsigned tx
     // T::SubmitUnsignedTransaction::submit_unsigned(call)
     //   .map_err(|_| "fetch_price: submit_signed(call) error")
+
     // Signed tx
+    // let local_accts = T::SubmitTransaction::find_local_keys(None);
+    // let (local_acct, local_key) = local_accts[0];
+    // debug::info!("acct: {:?}", local_acct);
+    // T::SignAndSubmitTransaction::sign_and_submit(call, local_key);
 
-    let local_accts = T::SubmitTransaction::find_local_keys(None);
-    let (local_acct, local_key) = local_accts[0];
-    debug::info!("acct: {:?}", local_acct);
-
-    // T::SignAndSubmitTransaction::submit_signed(call);
-    T::SignAndSubmitTransaction::sign_and_submit(call, local_key);
+    T::SubmitSignedTransaction::submit_signed(call);
     Ok(())
   }
 
@@ -315,8 +316,9 @@ impl<T: Trait> Module<T> {
     // Unsigned tx
     // T::SubmitUnsignedTransaction::submit_unsigned(call)
     //   .map_err(|_| "aggregate_pp: submit_signed(call) error")
+
     // Signed tx
-    T::SubmitTransaction::submit_signed(call);
+    T::SubmitSignedTransaction::submit_signed(call);
     Ok(())
   }
 }
