@@ -92,14 +92,15 @@ decl_storage! {
     SrcPricePoints get(src_price_pts): Vec<(T::Moment, u64)>;
 
     // mapping of token sym -> pp_ind
-    TokenSrcPPMap: map Vec<u8> => Vec<u32>;
+    // Using linked map for easy traversal from offchain worker or UI
+    TokenSrcPPMap: linked_map Vec<u8> => Vec<u32>;
 
     // mapping of remote_src -> pp_ind
-    RemoteSrcPPMap: map Vec<u8> => Vec<u32>;
+    RemoteSrcPPMap: linked_map Vec<u8> => Vec<u32>;
 
     // storage about aggregated price points (calculated with our logic)
     AggPricePoints get(agg_price_pts): Vec<(T::Moment, u64)>;
-    TokenAggPPMap: map Vec<u8> => Vec<u32>;
+    TokenAggPPMap: linked_map Vec<u8> => Vec<u32>;
   }
 }
 
@@ -113,6 +114,7 @@ decl_module! {
 
     pub fn record_price(
       origin,
+      _block: T::BlockNumber,
       crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>),
       price: u64
     ) -> dispatch::Result {
@@ -137,16 +139,18 @@ decl_module! {
       <TokenSrcPPMap>::mutate(sym.clone(), |token_vec| token_vec.push(pp_id));
       <RemoteSrcPPMap>::mutate(remote_src, |rs_vec| rs_vec.push(pp_id));
 
-      // REVIEW-CHECK: should I set check vector len reach max length and remove the earliest
-      //   price point? Do not want to shift index/re-index.
-
       // set the flag to kick off update aggregated pricing in offchain call
       <UpdateAggPP>::mutate(sym.clone(), |freq| *freq += 1);
 
       Ok(())
     }
 
-    pub fn record_agg_pp(origin, sym: Vec<u8>, price: u64) -> dispatch::Result {
+    pub fn record_agg_pp(
+      origin,
+      _block: T::BlockNumber,
+      sym: Vec<u8>,
+      price: u64
+    ) -> dispatch::Result {
       // Debug printout
       debug::info!("record_agg_pp: {}: {:?}",
         core::str::from_utf8(&sym).unwrap(),
@@ -177,7 +181,7 @@ decl_module! {
       // Type I task: fetch_price
       if duration > 0.into() && block % duration == 0.into() {
         for (sym, remote_src, remote_url) in FETCHED_CRYPTOS.iter() {
-          if let Err(e) = Self::fetch_price(*sym, *remote_src, *remote_url) {
+          if let Err(e) = Self::fetch_price(block, *sym, *remote_src, *remote_url) {
             debug::error!("Error fetching: {:?}, {:?}: {}",
               core::str::from_utf8(sym).unwrap(),
               core::str::from_utf8(remote_src).unwrap(),
@@ -191,7 +195,7 @@ decl_module! {
         // filter those to be updated
         .filter(|(_, freq)| *freq > 0)
         .for_each(|(sym, freq)| {
-          if let Err(e) = Self::aggregate_pp(&sym, freq as usize) {
+          if let Err(e) = Self::aggregate_pp(block, &sym, freq as usize) {
             debug::error!("Error aggregating price of {:?}: {}",
               core::str::from_utf8(&sym).unwrap(), e);
           }
@@ -229,13 +233,20 @@ impl<T: Trait> Module<T> {
     Ok(json_val)
   }
 
-  fn fetch_price<'a>(sym: &'a [u8], remote_src: &'a [u8], remote_url: &'a [u8]) -> dispatch::Result {
+  fn fetch_price<'a>(
+    block: T::BlockNumber,
+    sym: &'a [u8],
+    remote_src: &'a [u8],
+    remote_url: &'a [u8]
+  ) -> dispatch::Result {
     debug::info!("fetch price: {:?}:{:?}",
       core::str::from_utf8(sym).unwrap(),
       core::str::from_utf8(remote_src).unwrap()
     );
 
     let json = Self::fetch_json(remote_url)?;
+
+    let current_block = <timestamp::Module<T>>::get();
 
     let price = match remote_src {
       src if src == b"coincap" => Self::fetch_price_from_coincap(json)
@@ -245,11 +256,15 @@ impl<T: Trait> Module<T> {
       _ => Err("Unknown remote source"),
     }?;
 
-    let call = Call::record_price((sym.to_vec(), remote_src.to_vec(), remote_url.to_vec()), price);
+    let call = Call::record_price(
+      block,
+      (sym.to_vec(), remote_src.to_vec(), remote_url.to_vec()),
+      price
+    );
 
     // Unsigned tx
-    // T::SubmitUnsignedTransaction::submit_unsigned(call)
-    //   .map_err(|_| "fetch_price: submit_signed(call) error")
+    T::SubmitUnsignedTransaction::submit_unsigned(call)
+      .map_err(|_| "fetch_price: submit_signed(call) error")
 
     // Signed tx
     // let local_accts = T::SubmitTransaction::find_local_keys(None);
@@ -257,8 +272,8 @@ impl<T: Trait> Module<T> {
     // debug::info!("acct: {:?}", local_acct);
     // T::SignAndSubmitTransaction::sign_and_submit(call, local_key);
 
-    T::SubmitSignedTransaction::submit_signed(call);
-    Ok(())
+    // T::SubmitSignedTransaction::submit_signed(call);
+    // Ok(())
   }
 
   fn vecchars_to_vecbytes<I: IntoIterator<Item = char> + Clone>(it: &I) -> Vec<u8> {
@@ -298,7 +313,7 @@ impl<T: Trait> Module<T> {
     Ok(val_u64)
   }
 
-  fn aggregate_pp<'a>(sym: &'a [u8], freq: usize) -> dispatch::Result {
+  fn aggregate_pp<'a>(block: T::BlockNumber, sym: &'a [u8], freq: usize) -> dispatch::Result {
     let ts_pp_vec = <TokenSrcPPMap>::get(sym);
 
     // use the last `freq` number of prices and average them
@@ -311,15 +326,15 @@ impl<T: Trait> Module<T> {
     let price_avg: u64 = (price_sum as f64 / amt as f64).round() as u64;
 
     // submit onchain call for aggregating the price
-    let call = Call::record_agg_pp(sym.to_vec(), price_avg);
+    let call = Call::record_agg_pp(block, sym.to_vec(), price_avg);
 
     // Unsigned tx
-    // T::SubmitUnsignedTransaction::submit_unsigned(call)
-    //   .map_err(|_| "aggregate_pp: submit_signed(call) error")
+    T::SubmitUnsignedTransaction::submit_unsigned(call)
+      .map_err(|_| "aggregate_pp: submit_signed(call) error")
 
     // Signed tx
-    T::SubmitSignedTransaction::submit_signed(call);
-    Ok(())
+    // T::SubmitSignedTransaction::submit_signed(call);
+    // Ok(())
   }
 }
 
@@ -328,20 +343,19 @@ impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
   type Call = Call<T>;
 
   fn validate_unsigned(call: &Self::Call) -> TransactionValidity {
-    let now = <timestamp::Module<T>>::get();
 
     match call {
-      Call::record_price((sym, remote_src, ..), price) => Ok(ValidTransaction {
+      Call::record_price(block, (sym, remote_src, ..), price) => Ok(ValidTransaction {
         priority: 0,
         requires: vec![],
-        provides: vec![(now, sym, remote_src, price).encode()],
+        provides: vec![(block, sym, remote_src, price).encode()],
         longevity: TransactionLongevity::max_value(),
         propagate: true,
       }),
-      Call::record_agg_pp(sym, price) => Ok(ValidTransaction {
+      Call::record_agg_pp(block, sym, price) => Ok(ValidTransaction {
         priority: 0,
         requires: vec![],
-        provides: vec![(now, sym, price).encode()],
+        provides: vec![(block, sym, price).encode()],
         longevity: TransactionLongevity::max_value(),
         propagate: true,
       }),
