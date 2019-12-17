@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Form, Input, Grid, Card, Statistic } from 'semantic-ui-react';
+import { Grid } from 'semantic-ui-react';
 
 import { useSubstrate } from './substrate-lib';
+import TokenCards from './TokenCards';
 
 function Main (props) {
   const { api } = useSubstrate();
@@ -35,7 +36,10 @@ function Main (props) {
 
   return (
     <Grid.Column>
-      <h1>Price Fetch</h1>
+      <h1>External Price Fetch</h1>
+      { Object.keys(tokens).length > 0
+        ? <TokenCards tokens={ tokens }/>
+        : 'No Tokens Found.' }
     </Grid.Column>
 
   );

@@ -35,8 +35,7 @@ type StdResult<T> = core::result::Result<T, &'static str>;
 /// but only to app-specific subkeys, which are defined and grouped by their `KeyTypeId`.
 pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"ofpf");
 
-// REVIEW-CHECK: is it necessary to turn-around at vector `MAX_VEC_LEN`th index and use back
-//   zeroth index again?
+// REVIEW-CHECK: is it necessary to wrap-around storage vector at `MAX_VEC_LEN`?
 pub const MAX_VEC_LEN: usize = 1000;
 
 pub mod crypto {
@@ -45,7 +44,7 @@ pub mod crypto {
   app_crypto!(sr25519, KEY_TYPE);
 }
 
-pub const FETCHED_CRYPTOS: [(&[u8], &[u8], &[u8]); 4] = [
+pub const FETCHED_CRYPTOS: [(&[u8], &[u8], &[u8]); 6] = [
   (b"BTC", b"coincap",
     b"https://api.coincap.io/v2/assets/bitcoin"),
   (b"BTC", b"cryptocompare",
@@ -54,6 +53,10 @@ pub const FETCHED_CRYPTOS: [(&[u8], &[u8], &[u8]); 4] = [
    b"https://api.coincap.io/v2/assets/ethereum"),
   (b"ETH", b"cryptocompare",
     b"https://min-api.cryptocompare.com/data/price?fsym=ETH&tsyms=USD"),
+  (b"DAI", b"coincap",
+    b"https://api.coincap.io/v2/assets/dai"),
+  (b"DAI", b"cryptocompare",
+    b"https://min-api.cryptocompare.com/data/price?fsym=DAI&tsyms=USD"),
 ];
 
 /// The module's configuration trait.
