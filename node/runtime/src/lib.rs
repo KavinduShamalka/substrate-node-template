@@ -240,7 +240,7 @@ type SubmitPFTransaction = system::offchain::TransactionSubmitter<
 >;
 
 parameter_types! {
-	pub const BlockFetchDur: BlockNumber = 3;
+	pub const BlockFetchDur: BlockNumber = 2;
 }
 
 impl price_fetch::Trait for Runtime {
