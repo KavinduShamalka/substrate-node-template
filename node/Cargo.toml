@@ -22,73 +22,88 @@ trie-root = "0.15.2"
 # substrate dependencies from github
 [dependencies.sp-io]
 git = "https://github.com/paritytech/substrate.git"
-rev = "dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306"
+rev = "af1782e25da48be65389135d5d264546c416fa12"
+version = "2.0.0"
 
 [dependencies.sc-cli]
 git = "https://github.com/paritytech/substrate.git"
-rev = "dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306"
+rev = "af1782e25da48be65389135d5d264546c416fa12"
+version = "2.0.0"
 
 [dependencies.primitives]
 git = "https://github.com/paritytech/substrate.git"
-rev = "dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306"
+rev = "af1782e25da48be65389135d5d264546c416fa12"
 package = "sp-core"
+version = "2.0.0"
 
 [dependencies.sc-executor]
 git = "https://github.com/paritytech/substrate.git"
-rev = "dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306"
+rev = "af1782e25da48be65389135d5d264546c416fa12"
+version = "2.0.0"
 
 [dependencies.sc-service]
 git = "https://github.com/paritytech/substrate.git"
-rev = "dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306"
+rev = "af1782e25da48be65389135d5d264546c416fa12"
+version = "2.0.0"
 
 [dependencies.inherents]
 git = "https://github.com/paritytech/substrate.git"
-rev = "dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306"
+rev = "af1782e25da48be65389135d5d264546c416fa12"
 package = "sp-inherents"
+version = "2.0.0"
 
 [dependencies.txpool]
 git = "https://github.com/paritytech/substrate.git"
-rev = "dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306"
+rev = "af1782e25da48be65389135d5d264546c416fa12"
 package = "sc-transaction-pool"
+version = "2.0.0"
 
-[dependencies.txpool-api]
+[dependencies.sp-transaction-pool]
 git = "https://github.com/paritytech/substrate.git"
-rev = "dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306"
-package = "sp-transaction-pool-api"
+rev = "af1782e25da48be65389135d5d264546c416fa12"
+package = "sp-transaction-pool"
+version = "2.0.0"
 
 [dependencies.network]
 git = "https://github.com/paritytech/substrate.git"
-rev = "dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306"
+rev = "af1782e25da48be65389135d5d264546c416fa12"
 package = "sc-network"
+version = "0.8"
 
 [dependencies.aura]
 git = "https://github.com/paritytech/substrate.git"
-rev = "dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306"
+rev = "af1782e25da48be65389135d5d264546c416fa12"
 package = "sc-consensus-aura"
+version = "0.8"
 
 [dependencies.aura-primitives]
 git = "https://github.com/paritytech/substrate.git"
-rev = "dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306"
+rev = "af1782e25da48be65389135d5d264546c416fa12"
 package = "sp-consensus-aura"
+version = "0.8"
 
 [dependencies.consensus-common]
 git = "https://github.com/paritytech/substrate.git"
-rev = "dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306"
+rev = "af1782e25da48be65389135d5d264546c416fa12"
 package = "sp-consensus"
+version = "0.8"
 
 [dependencies.grandpa]
 git = "https://github.com/paritytech/substrate.git"
-rev = "dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306"
+rev = "af1782e25da48be65389135d5d264546c416fa12"
 package = "sc-finality-grandpa"
+version = "2.0.0"
 
 [dependencies.grandpa-primitives]
 git = "https://github.com/paritytech/substrate.git"
-rev = "dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306"
-package = "sp-finality-granpda"
+rev = "af1782e25da48be65389135d5d264546c416fa12"
+package = "sp-finality-grandpa"
+version = "2.0.0"
 
 [dependencies.sc-client]
 git = "https://github.com/paritytech/substrate.git"
-rev = "dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306"
+rev = "af1782e25da48be65389135d5d264546c416fa12"
+version = "2.0.0"
 
 [dependencies.runtime]
 package = "runtime"
@@ -96,11 +111,11 @@ path = "./runtime"
 
 [dependencies.sp-runtime]
 git = "https://github.com/paritytech/substrate.git"
-rev = "dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306"
+rev = "af1782e25da48be65389135d5d264546c416fa12"
 
 [dependencies.basic-authorship]
 git = "https://github.com/paritytech/substrate.git"
-rev = "dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306"
+rev = "af1782e25da48be65389135d5d264546c416fa12"
 package = "sc-basic-authority"
 
 [build-dependencies]
@@ -108,5 +123,5 @@ vergen = "3.0.4"
 
 [build-dependencies.build-script-utils]
 git = "https://github.com/paritytech/substrate.git"
-rev = "dc8d71c3f0967e9721181e1c0d0d2b3cedbfc306"
+rev = "af1782e25da48be65389135d5d264546c416fa12"
 package = "substrate-build-script-utils"

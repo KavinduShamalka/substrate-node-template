@@ -10,7 +10,8 @@
 // We have to import a few things
 use rstd::{prelude::*, convert::TryInto};
 use primitives::crypto::KeyTypeId;
-use support::{decl_module, decl_storage, decl_event, dispatch, debug, traits::Get};
+use support::{decl_module, decl_storage, decl_event, dispatch, dispatch::DispatchError,
+  debug, traits::Get};
 use system::{ ensure_signed, offchain,
   offchain::SubmitSignedTransaction,
   offchain::SubmitUnsignedTransaction,
@@ -120,7 +121,7 @@ decl_module! {
       _block: T::BlockNumber,
       crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>),
       price: u64
-    ) -> dispatch::Result {
+    ) -> dispatch::DispatchResult {
       let (sym, remote_src) = (crypto_info.0, crypto_info.1);
       let now = <timestamp::Module<T>>::get();
 
@@ -153,7 +154,7 @@ decl_module! {
       _block: T::BlockNumber,
       sym: Vec<u8>,
       price: u64
-    ) -> dispatch::Result {
+    ) -> dispatch::DispatchResult {
       // Debug printout
       debug::info!("record_agg_pp: {}: {:?}",
         core::str::from_utf8(&sym).unwrap(),
@@ -185,7 +186,7 @@ decl_module! {
       if duration > 0.into() && block % duration == 0.into() {
         for (sym, remote_src, remote_url) in FETCHED_CRYPTOS.iter() {
           if let Err(e) = Self::fetch_price(block, *sym, *remote_src, *remote_url) {
-            debug::error!("Error fetching: {:?}, {:?}: {}",
+            debug::error!("Error fetching: {:?}, {:?}: {:?}",
               core::str::from_utf8(sym).unwrap(),
               core::str::from_utf8(remote_src).unwrap(),
               e);
@@ -199,7 +200,7 @@ decl_module! {
         .filter(|(_, freq)| *freq > 0)
         .for_each(|(sym, freq)| {
           if let Err(e) = Self::aggregate_pp(block, &sym, freq as usize) {
-            debug::error!("Error aggregating price of {:?}: {}",
+            debug::error!("Error aggregating price of {:?}: {:?}",
               core::str::from_utf8(&sym).unwrap(), e);
           }
         });
@@ -241,7 +242,7 @@ impl<T: Trait> Module<T> {
     sym: &'a [u8],
     remote_src: &'a [u8],
     remote_url: &'a [u8]
-  ) -> dispatch::Result {
+  ) -> dispatch::DispatchResult {
     debug::info!("fetch price: {:?}:{:?}",
       core::str::from_utf8(sym).unwrap(),
       core::str::from_utf8(remote_src).unwrap()
@@ -267,7 +268,7 @@ impl<T: Trait> Module<T> {
 
     // Unsigned tx
     T::SubmitUnsignedTransaction::submit_unsigned(call)
-      .map_err(|_| "fetch_price: submit_signed(call) error")
+      .map_err(|_| DispatchError::Other("fetch_price: submit_signed(call) error"))
 
     // Signed tx
     // let local_accts = T::SubmitTransaction::find_local_keys(None);
@@ -316,7 +317,7 @@ impl<T: Trait> Module<T> {
     Ok(val_u64)
   }
 
-  fn aggregate_pp<'a>(block: T::BlockNumber, sym: &'a [u8], freq: usize) -> dispatch::Result {
+  fn aggregate_pp<'a>(block: T::BlockNumber, sym: &'a [u8], freq: usize) -> dispatch::DispatchResult {
     let ts_pp_vec = <TokenSrcPPMap>::get(sym);
 
     // use the last `freq` number of prices and average them
@@ -333,7 +334,7 @@ impl<T: Trait> Module<T> {
 
     // Unsigned tx
     T::SubmitUnsignedTransaction::submit_unsigned(call)
-      .map_err(|_| "aggregate_pp: submit_signed(call) error")
+      .map_err(|_| DispatchError::Other("aggregate_pp: submit_signed(call) error"))
 
     // Signed tx
     // T::SubmitSignedTransaction::submit_signed(call);
@@ -341,7 +342,6 @@ impl<T: Trait> Module<T> {
   }
 }
 
-#[allow(deprecated)]
 impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
   type Call = Call<T>;
 
