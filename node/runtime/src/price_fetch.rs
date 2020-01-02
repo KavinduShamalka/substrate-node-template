@@ -117,7 +117,7 @@ decl_module! {
     fn deposit_event() = default;
 
     pub fn record_price(
-      origin,
+      _origin,
       _block: T::BlockNumber,
       crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>),
       price: u64
@@ -150,7 +150,7 @@ decl_module! {
     }
 
     pub fn record_agg_pp(
-      origin,
+      _origin,
       _block: T::BlockNumber,
       sym: Vec<u8>,
       price: u64
@@ -249,8 +249,6 @@ impl<T: Trait> Module<T> {
     );
 
     let json = Self::fetch_json(remote_url)?;
-
-    let current_block = <timestamp::Module<T>>::get();
 
     let price = match remote_src {
       src if src == b"coincap" => Self::fetch_price_from_coincap(json)
