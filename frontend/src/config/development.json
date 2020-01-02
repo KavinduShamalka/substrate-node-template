@@ -1,3 +1,3 @@
 {
-  "PROVIDER_SOCKET": "wss://staging.hkwtf.com/socket/"
+  "PROVIDER_SOCKET": "ws://localhost:9944"
 }
