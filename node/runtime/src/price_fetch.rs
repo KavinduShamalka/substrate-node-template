@@ -12,7 +12,7 @@ use rstd::{prelude::*, convert::TryInto};
 use primitives::crypto::KeyTypeId;
 use support::{decl_module, decl_storage, decl_event, dispatch, dispatch::DispatchError,
   debug, traits::Get};
-use system::{ ensure_signed, offchain,
+use system::{ offchain,
   offchain::SubmitSignedTransaction,
   offchain::SubmitUnsignedTransaction,
   offchain::SignAndSubmitTransaction };
