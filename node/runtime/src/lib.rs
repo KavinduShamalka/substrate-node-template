@@ -93,8 +93,8 @@ pub mod opaque {
 
 /// This runtime version.
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-	spec_name: create_runtime_str!("offchain-worker"),
-	impl_name: create_runtime_str!("offchain-worker"),
+	spec_name: create_runtime_str!("offchain-price-fetch"),
+	impl_name: create_runtime_str!("offchain-price-fetch"),
 	authoring_version: 1,
 	spec_version: 1,
 	impl_version: 1,

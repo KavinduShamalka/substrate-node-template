@@ -1,81 +1,97 @@
-# Substrate Package
+# Substrate Offchain Price Fetch
 
-A stable, known working version of the [Substrate Node Template](https://github.com/substrate-developer-hub/substrate-node-template), [Substrate Module Template](https://github.com/substrate-developer-hub/substrate-module-template), and [Substrate Front End Template](https://github.com/substrate-developer-hub/substrate-front-end-template).
+## Project Motivation
 
-## What is this?
+It is often necessary we fetch external data in our blockchain applications. In traditional application this can be done in a simple HTTP Restful fetch. But it is not possible to do it in blockchain runtime. First it is not necessary for every node in the network to send a request to the remote end. Second the http requests does not return a deterministic result, there maybe network delays, or even errors, and we are not sure how long the request will take to return. This can possibly cause block production delay and problems.
 
-* The fastest way to get started building on Substrate.
-* Compatible with the latest documentation available for Substrate runtime module development.
-* Using [Substrate](https://github.com/paritytech/substrate) commit: `7d7e74fb77b6bee2ce9d6ebafcae09caff2d0e50`
-* Using [Polkadot-JS API](https://github.com/polkadot-js/api/) version: `^0.91.0-beta.22`
+What we need is something of a worker that is outside of the normal state transition cycle during block production, an off-chain worker, that is executed by a few dedicated nodes in the network.
 
-## How to use it:
+[Substrate](https://github.com/paritytech/substrate), a flexible blockchain development framework does offer such [Off-chain Workers](https://substrate.dev/docs/en/next/conceptual/core/off-chain-workers) feature. This project is a demonstration of this feature.
 
- * Run `git clone https://github.com/substrate-developer-hub/substrate-package.git`.
- * Run `cd substrate-package`.
- * Run `curl https://getsubstrate.io -sSf | bash -s -- --fast`
-    * This installs external dependencies needed for substrate. [Take a look at the script](https://getsubstrate.io).
-    * The `--fast` command allows us to skip the `cargo install` steps for `substrate` and `subkey`, which is not needed for runtime development.
-    * Windows users need to follow [instructions here](https://github.com/paritytech/substrate#61-hacking-on-substrate) instead
+This project consists of a Substrate node with a [custom pallet](node/runtime/src/price_fetch.rs) that use off-chain worker to fetch prices of a few cryptocurrencies, each from two external sources and then aggregate them by simple averaging and record back to on-chain storage.
 
-* Go into the `substrate-node-template` folder and run:
+## How It Works
 
-    ```sh
-    ./scripts/init.sh
-    cargo build --release
-    ./target/release/node-template --dev
-    ```
+This project has a setup of using [Substrate Node Template](https://github.com/substrate-developer-hub/substrate-node-template) in the [`node`](node) folder, and [Substrate Front-end Template](https://github.com/substrate-developer-hub/substrate-front-end-template) in the [`frontend`](frontend) folder.
 
-    The above process may take 30 minuites or so, depending on your hardware. This should start your node, and you should see blocks being created.
+The meat of the project is in [`node/runtime/src/lib.rs`](node/runtime/src/lib.rs) and [`node/runtime/src/price_fetch.rs`](node/runtime/src/price_fetch.rs).
 
-* Go into the `substrate-front-end-template` folder and run:
+### 1. `node/runtime/src/lib.rs`
 
-    ```sh
-    yarn install
-    yarn start
-    ```
+In this file, in addition to the regular lib setup, we specify a `SubmitPFTransaction` type and pass in this as the associated type for our pallet trait. We then implement the `system::offchain::CreateTransaction` trait afterwards as follows:
 
-    This should start a web server on `localhost:3000` where you can interact with your node.
+```rust
+// -- snip --
+type SubmitPFTransaction = system::offchain::TransactionSubmitter<
+  price_fetch::crypto::Public,
+  Runtime,
+  UncheckedExtrinsic
+>;
 
-* Go into the `substrate-module-template` folder:
-    * Read `HOWTO.md`
-    * Edit `/src/lib.rs` to create a custom Substrate runtime module
-    * Add dependencies to `Cargo.toml` with the appropriate `rev`
+parameter_types! {
+  pub const BlockFetchDur: BlockNumber = 2;
+}
 
-* Interact with your node and hack away!
+impl price_fetch::Trait for Runtime {
+  type Event = Event;
+  type Call = Call;
+  type SubmitSignedTransaction = SubmitPFTransaction;
+  type SignAndSubmitTransaction = SubmitPFTransaction;
+  type SubmitUnsignedTransaction = SubmitPFTransaction;
+  type BlockFetchDur = BlockFetchDur;
+}
 
-## What is the Substrate Module Template?
+impl system::offchain::CreateTransaction<Runtime, UncheckedExtrinsic> for Runtime {
+  type Public = <Signature as Verify>::Signer;
+  type Signature = Signature;
 
-The `substrate-module-template` is a template where you can start building your own runtime module as it's own independent crate.
+  fn create_transaction<TSigner: system::offchain::Signer<Self::Public, Self::Signature>> (
+    call: Call,
+    public: Self::Public,
+    account: AccountId,
+    index: Index,
+  ) -> Option<(Call, <UncheckedExtrinsic as sp_runtime::traits::Extrinsic>::SignaturePayload)> {
+    // ...
+  }
+}
 
-This is an alternative from writing your module in `substrate-node-template/runtime/src/template.rs`, where you would not be able to easily share your runtime module after your are done. We recommend development in the `substrate-module-template` if you want to allow others to include your runtime module into their Substrate node.
-
-Instructions for using the `substrate-module-template` are included with the project.
-
-We have added the Substrate module template as a dependency to the `substrate-node-template`, but if you want to remove it, you will need to:
-
-1. Remove references from the runtime `Cargo.toml` file.
-2. Remove references from the runtime `lib.rs` file.
-
-# How was it made?
-
-This project simply clones the individual templates in a single place where they are tested to be compatible with one another.
-
-```bash
-git clone https://github.com/substrate-developer-hub/substrate-node-template
-git clone https://github.com/substrate-developer-hub/substrate-module-template
-git clone https://github.com/substrate-developer-hub/substrate-front-end-template
+// -- snip --
 ```
 
-# Why do I need `substrate-package`?
+### 2. `node/runtime/src/price_fetch.rs`
 
-Substrate is a rapidly evolving platform, which means that breaking changes may occur on a day to day basis.
-Most of the times, these breaking changes do not radically change how substrate works, but may affect how Substrate is organized, the name of functions, the name of modules, etc...
+Feel free to look at the [src code](node/runtime/src/price_fetch.rs) side by side with the following description.
 
-The `substrate-package` repository tries to help solve these problems by taking a snapshot of `substrate` when it is known to be working and compatible with these different resources:
+Note the necessary included modules at the top for:
 
-* Documentation
-* Tutorials
-* Samples
-* User Interfaces
-* etc...
+  - `system::{ offchain, ...}`, off-chain workers, for submitting transaction
+  - `simple_json`, a lightweight json-parsing library that work in `no_std` environment
+  - `sp_runtime::{...}`, some libraries to handle HTTP requests and sending transactions back on-chain.
+
+The main logic of this pallet goes as:
+
+- After a block is produced, `offchain_worker` function is called. This is the main entry point of the Substrate off-chain worker. It checks that for every `BlockFetchDur` blocks (set in `lib.rs`), the off-chain worker goes out and fetch the price based on the config data in `FETCHED_CRYPTOS`.
+
+- For each entry of the `FETCHED_CRYPTOS`, it execute the `fetch_price` function, and get the JSON response back from `fetch_json` function. The JSON is parsed for a specific format to return the price in (USD dollar * 1000) in integer format.
+
+- We then submit an unsigned transaction to call the on-chain extrinsics `record_price` function to record the price. All unsigned transactions by default are regarded as invalid transactions, so we explicitly enable them in the `validate_unsigned` function.
+
+- On the next block generation, the price is stored on-chain. The `SrcPricePoints` stores the actual price + timestamp (price point), and `TokenSrcPPMap` and `RemoteSrcPPMap` are the indices mapping the cryptocurrency and remote src to the price point. Finally `UpdateAggPP` are incremented by one, so later we know the denominator to use when calculating the mean of the crypto price.
+
+- Once the block is generated, `offchain_worker` function kicks in again, and see that `UpdateAggPP` have mapping value(s) greater than 0, then the medianizer, `aggregate_pp` kicks in. This function retrieves the last `UpdateAggPP` mapping value (passed in to the function as `freq` parameter) of that crypto prices and find the mean. Then we submit an unsigned transaction to call the on-chain extrinsics `record_agg_pp` function to record the mean price of the cryptocurrencies, with logic similar to the `record_price` function.
+
+## Frontend
+
+It is based on [Substrate Front-end Template](https://github.com/substrate-developer-hub/substrate-front-end-template) with a new section to show cryptocurrency prices.
+
+![](assets/ss-price-fetch01.png)
+
+## How to Run
+
+- For the node, same instructions as [Substrate Node Template](https://github.com/substrate-developer-hub/substrate-node-template)
+
+- For front end, same instructions as [Substrate Front-end Template](https://github.com/substrate-developer-hub/substrate-front-end-template)
+
+## Further Enhancement
+
+- Tracked in [this issue](#11)
