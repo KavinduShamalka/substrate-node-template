@@ -94,4 +94,4 @@ It is based on [Substrate Front-end Template](https://github.com/substrate-devel
 
 ## Further Enhancement
 
-- Tracked in [this issue](#11)
+- Tracked in [issue #11](../../issues/11).
