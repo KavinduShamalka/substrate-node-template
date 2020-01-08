@@ -20,6 +20,7 @@ use simple_json::{ self, json::JsonValue };
 
 use runtime_io::{ self, misc::print_utf8 as print_bytes };
 use codec::{ Encode };
+#[cfg(not(feature = "std"))]
 use num_traits::float::FloatCore;
 use sp_runtime::{
   offchain::http,
