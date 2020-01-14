@@ -22,87 +22,87 @@ trie-root = "0.15.2"
 # substrate dependencies from github
 [dependencies.sp-io]
 git = "https://github.com/paritytech/substrate.git"
-rev = "44772d27744df4851c4d29558556c260bbdf2167"
+rev = "3e651110aa06aa835790df63410a29676243fc54"
 version = "2.0.0"
 
 [dependencies.sc-cli]
 git = "https://github.com/paritytech/substrate.git"
-rev = "44772d27744df4851c4d29558556c260bbdf2167"
+rev = "3e651110aa06aa835790df63410a29676243fc54"
 version = "2.0.0"
 
 [dependencies.primitives]
 git = "https://github.com/paritytech/substrate.git"
-rev = "44772d27744df4851c4d29558556c260bbdf2167"
+rev = "3e651110aa06aa835790df63410a29676243fc54"
 package = "sp-core"
 version = "2.0.0"
 
 [dependencies.sc-executor]
 git = "https://github.com/paritytech/substrate.git"
-rev = "44772d27744df4851c4d29558556c260bbdf2167"
+rev = "3e651110aa06aa835790df63410a29676243fc54"
 version = "2.0.0"
 
 [dependencies.sc-service]
 git = "https://github.com/paritytech/substrate.git"
-rev = "44772d27744df4851c4d29558556c260bbdf2167"
+rev = "3e651110aa06aa835790df63410a29676243fc54"
 version = "2.0.0"
 
 [dependencies.inherents]
 git = "https://github.com/paritytech/substrate.git"
-rev = "44772d27744df4851c4d29558556c260bbdf2167"
+rev = "3e651110aa06aa835790df63410a29676243fc54"
 package = "sp-inherents"
 version = "2.0.0"
 
 [dependencies.txpool]
 git = "https://github.com/paritytech/substrate.git"
-rev = "44772d27744df4851c4d29558556c260bbdf2167"
+rev = "3e651110aa06aa835790df63410a29676243fc54"
 package = "sc-transaction-pool"
 version = "2.0.0"
 
 [dependencies.txpool_api]
 git = "https://github.com/paritytech/substrate.git"
-rev = "44772d27744df4851c4d29558556c260bbdf2167"
+rev = "3e651110aa06aa835790df63410a29676243fc54"
 package = "sp-transaction-pool"
 version = "2.0.0"
 
 [dependencies.network]
 git = "https://github.com/paritytech/substrate.git"
-rev = "44772d27744df4851c4d29558556c260bbdf2167"
+rev = "3e651110aa06aa835790df63410a29676243fc54"
 package = "sc-network"
 version = "0.8"
 
 [dependencies.aura]
 git = "https://github.com/paritytech/substrate.git"
-rev = "44772d27744df4851c4d29558556c260bbdf2167"
+rev = "3e651110aa06aa835790df63410a29676243fc54"
 package = "sc-consensus-aura"
 version = "0.8"
 
 [dependencies.aura-primitives]
 git = "https://github.com/paritytech/substrate.git"
-rev = "44772d27744df4851c4d29558556c260bbdf2167"
+rev = "3e651110aa06aa835790df63410a29676243fc54"
 package = "sp-consensus-aura"
 version = "0.8"
 
 [dependencies.consensus-common]
 git = "https://github.com/paritytech/substrate.git"
-rev = "44772d27744df4851c4d29558556c260bbdf2167"
+rev = "3e651110aa06aa835790df63410a29676243fc54"
 package = "sp-consensus"
 version = "0.8"
 
 [dependencies.grandpa]
 git = "https://github.com/paritytech/substrate.git"
-rev = "44772d27744df4851c4d29558556c260bbdf2167"
+rev = "3e651110aa06aa835790df63410a29676243fc54"
 package = "sc-finality-grandpa"
 version = "2.0.0"
 
 [dependencies.grandpa-primitives]
 git = "https://github.com/paritytech/substrate.git"
-rev = "44772d27744df4851c4d29558556c260bbdf2167"
+rev = "3e651110aa06aa835790df63410a29676243fc54"
 package = "sp-finality-grandpa"
 version = "2.0.0"
 
 [dependencies.sc-client]
 git = "https://github.com/paritytech/substrate.git"
-rev = "44772d27744df4851c4d29558556c260bbdf2167"
+rev = "3e651110aa06aa835790df63410a29676243fc54"
 version = "2.0.0"
 
 [dependencies.runtime]
@@ -111,11 +111,11 @@ path = "./runtime"
 
 [dependencies.sp-runtime]
 git = "https://github.com/paritytech/substrate.git"
-rev = "44772d27744df4851c4d29558556c260bbdf2167"
+rev = "3e651110aa06aa835790df63410a29676243fc54"
 
 [dependencies.basic-authorship]
 git = "https://github.com/paritytech/substrate.git"
-rev = "44772d27744df4851c4d29558556c260bbdf2167"
+rev = "3e651110aa06aa835790df63410a29676243fc54"
 package = "sc-basic-authority"
 
 [build-dependencies]
@@ -123,5 +123,5 @@ vergen = "3.0.4"
 
 [build-dependencies.build-script-utils]
 git = "https://github.com/paritytech/substrate.git"
-rev = "44772d27744df4851c4d29558556c260bbdf2167"
+rev = "3e651110aa06aa835790df63410a29676243fc54"
 package = "substrate-build-script-utils"
