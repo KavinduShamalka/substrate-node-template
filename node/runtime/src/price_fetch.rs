@@ -14,8 +14,8 @@ use support::{decl_module, decl_storage, decl_event, dispatch, dispatch::Dispatc
   debug, traits::Get};
 use system::offchain::{SubmitSignedTransaction, SubmitUnsignedTransaction, SignAndSubmitTransaction};
 use simple_json::{self, json::JsonValue};
-
 use runtime_io::{self, misc::print_utf8 as print_bytes};
+#[cfg(not(feature = "std"))]
 use num_traits::float::FloatCore;
 use codec::Encode;
 use sp_runtime::{
