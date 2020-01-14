@@ -12,7 +12,7 @@ use rstd::{prelude::*, convert::TryInto};
 use primitives::crypto::KeyTypeId;
 use support::{decl_module, decl_storage, decl_event, dispatch, dispatch::DispatchError,
   debug, traits::Get};
-use system::offchain::{SubmitSignedTransaction, SubmitUnsignedTransaction, SignAndSubmitTransaction};
+use system::offchain::{SubmitSignedTransaction, SubmitUnsignedTransaction};
 use simple_json::{self, json::JsonValue};
 use runtime_io::{self, misc::print_utf8 as print_bytes};
 #[cfg(not(feature = "std"))]
@@ -64,7 +64,6 @@ pub trait Trait: timestamp::Trait + system::Trait {
   type Call: From<Call<Self>>;
 
   type SubmitSignedTransaction: SubmitSignedTransaction<Self, <Self as Trait>::Call>;
-  type SignAndSubmitTransaction: SignAndSubmitTransaction<Self, <Self as Trait>::Call>;
   type SubmitUnsignedTransaction: SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
 
   // Wait period between automated fetches. Set to 0 disable this feature.

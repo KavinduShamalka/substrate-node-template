@@ -12,12 +12,12 @@ pub use sc_cli::{VersionInfo, IntoExit, error};
 
 fn main() -> Result<(), cli::error::Error> {
 	let version = VersionInfo {
-		name: "Offchain Worker - Price Fetch",
+		name: "Off-chain Price Fetch",
 		commit: env!("VERGEN_SHA_SHORT"),
 		version: env!("CARGO_PKG_VERSION"),
-		executable_name: "offchain-pricefetch",
+		executable_name: "node",
 		author: "Jimmy Chu",
-		description: "Offchain Worker - Price Fetch",
+		description: "Off-chain Price Fetch",
 		support_url: "https://github.com/jimmychu0807/substrate-offchain-pricefetch",
 	};
 

@@ -1,8 +1,15 @@
+[workspace]
+members = ["node"]
+
 [package]
-name = "runtime"
+name = "ocpf-runtime"
+authors = ["Jimmy Chu"]
 version = "2.0.0"
-authors = ["Anonymous"]
 edition = "2018"
+build = "runtime/build.rs"
+
+[lib]
+path = "runtime/src/lib.rs"
 
 [dependencies]
 safe-mix = { version = "1.0.0", default-features = false }

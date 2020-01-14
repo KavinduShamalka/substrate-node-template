@@ -251,7 +251,6 @@ impl price_fetch::Trait for Runtime {
 	type Event = Event;
 	type Call = Call;
 	type SubmitSignedTransaction = SubmitPFTransaction;
-	type SignAndSubmitTransaction = SubmitPFTransaction;
 	type SubmitUnsignedTransaction = SubmitPFTransaction;
 	type BlockFetchDur = BlockFetchDur;
 }
@@ -296,7 +295,7 @@ construct_runtime!(
 		Aura: aura::{Module, Config<T>, Inherent(Timestamp)},
 		Grandpa: grandpa::{Module, Call, Storage, Config, Event},
 		Indices: indices,
-		Balances: balances::{default, Error},
+		Balances: balances,
 		TransactionPayment: transaction_payment::{Module, Storage},
 		Sudo: sudo,
 		RandomnessCollectiveFlip: randomness_collective_flip::{Module, Call, Storage},

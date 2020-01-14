@@ -1,11 +1,13 @@
 #!/usr/bin/env ruby
 EXE_FLAG = ARGV[0];
-BINARY = "offchain-node";
+BINARY = "node";
 
 project_root = File.expand_path("#{__dir__}/..");
 
 if (EXE_FLAG == "build")
   system("cd #{project_root}; cargo remote -- build --release")
+elsif (EXE_FLAG == "build-node")
+  system("cd #{project_root}; cargo remote -- build --release -p ocpf-node")
 else
   if (EXE_FLAG == "clean")
     # this cmd meant to be run in remote dev host
