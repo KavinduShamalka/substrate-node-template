@@ -12,15 +12,12 @@ use rstd::{prelude::*, convert::TryInto};
 use primitives::crypto::KeyTypeId;
 use support::{decl_module, decl_storage, decl_event, dispatch, dispatch::DispatchError,
   debug, traits::Get};
-use system::{ offchain,
-  offchain::SubmitSignedTransaction,
-  offchain::SubmitUnsignedTransaction,
-  offchain::SignAndSubmitTransaction };
-use simple_json::{ self, json::JsonValue };
-
-use runtime_io::{ self, misc::print_utf8 as print_bytes };
-use codec::{ Encode };
+use system::offchain::{SubmitSignedTransaction, SubmitUnsignedTransaction, SignAndSubmitTransaction};
+use simple_json::{self, json::JsonValue};
+use runtime_io::{self, misc::print_utf8 as print_bytes};
+#[cfg(not(feature = "std"))]
 use num_traits::float::FloatCore;
+use codec::Encode;
 use sp_runtime::{
   offchain::http,
   transaction_validity::{
@@ -66,9 +63,9 @@ pub trait Trait: timestamp::Trait + system::Trait {
   type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
   type Call: From<Call<Self>>;
 
-  type SubmitSignedTransaction: offchain::SubmitSignedTransaction<Self, <Self as Trait>::Call>;
-  type SignAndSubmitTransaction: offchain::SignAndSubmitTransaction<Self, <Self as Trait>::Call>;
-  type SubmitUnsignedTransaction: offchain::SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
+  type SubmitSignedTransaction: SubmitSignedTransaction<Self, <Self as Trait>::Call>;
+  type SignAndSubmitTransaction: SignAndSubmitTransaction<Self, <Self as Trait>::Call>;
+  type SubmitUnsignedTransaction: SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
 
   // Wait period between automated fetches. Set to 0 disable this feature.
   //   Then you need to manucally kickoff pricefetch
