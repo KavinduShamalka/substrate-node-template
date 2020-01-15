@@ -6,7 +6,7 @@ edition = '2018'
 build = 'build.rs'
 
 [[bin]]
-name = 'node'
+name = 'ocpf-node'
 path = 'src/main.rs'
 
 [dependencies]

@@ -62,7 +62,6 @@ pub trait Trait: timestamp::Trait + system::Trait {
   /// The overarching event type.
   type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
   type Call: From<Call<Self>>;
-
   type SubmitSignedTransaction: SubmitSignedTransaction<Self, <Self as Trait>::Call>;
   type SubmitUnsignedTransaction: SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
 
@@ -72,9 +71,7 @@ pub trait Trait: timestamp::Trait + system::Trait {
 }
 
 decl_event!(
-  pub enum Event<T> where
-    Moment = <T as timestamp::Trait>::Moment {
-
+  pub enum Event<T> where Moment = <T as timestamp::Trait>::Moment {
     FetchedPrice(Vec<u8>, Vec<u8>, Moment, u64),
     AggregatedPrice(Vec<u8>, Moment, u64),
   }
@@ -93,10 +90,10 @@ decl_storage! {
 
     // mapping of token sym -> pp_ind
     // Using linked map for easy traversal from offchain worker or UI
-    TokenSrcPPMap: linked_map Vec<u8> => Vec<u32>;
+    TokenSrcPPMap: map Vec<u8> => Vec<u32>;
 
     // mapping of remote_src -> pp_ind
-    RemoteSrcPPMap: linked_map Vec<u8> => Vec<u32>;
+    RemoteSrcPPMap: map Vec<u8> => Vec<u32>;
 
     // storage about aggregated price points (calculated with our logic)
     AggPricePoints get(agg_price_pts): Vec<(T::Moment, u64)>;

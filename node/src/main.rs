@@ -15,7 +15,7 @@ fn main() -> Result<(), cli::error::Error> {
 		name: "Off-chain Price Fetch",
 		commit: env!("VERGEN_SHA_SHORT"),
 		version: env!("CARGO_PKG_VERSION"),
-		executable_name: "node",
+		executable_name: "ocpf-node",
 		author: "Jimmy Chu",
 		description: "Off-chain Price Fetch",
 		support_url: "https://github.com/jimmychu0807/substrate-offchain-pricefetch",

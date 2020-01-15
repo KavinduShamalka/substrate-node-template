@@ -1,18 +1,18 @@
 #!/usr/bin/env ruby
 EXE_FLAG = ARGV[0];
-BINARY = "node";
+PACKAGE = "ocpf-node";
 
 project_root = File.expand_path("#{__dir__}/..");
 
 if (EXE_FLAG == "build")
   system("cd #{project_root}; cargo remote -- build --release")
 elsif (EXE_FLAG == "build-node")
-  system("cd #{project_root}; cargo remote -- build --release -p ocpf-node")
+  system("cd #{project_root}; cargo remote -- build --release -p #{PACKAGE}")
 else
   if (EXE_FLAG == "clean")
     # this cmd meant to be run in remote dev host
-    system("#{project_root}/target/release/#{BINARY} purge-chain --dev");
+    system("#{project_root}/target/release/#{PACKAGE} purge-chain --dev");
   end
   # this cmd meant to be run in remote dev host
-  system("#{project_root}/target/release/#{BINARY} --dev -lruntime=trace");
+  system("#{project_root}/target/release/#{PACKAGE} --dev -lruntime=trace");
 end
