@@ -13,6 +13,7 @@ use primitives::crypto::KeyTypeId;
 use support::{decl_module, decl_storage, decl_event, dispatch, dispatch::DispatchError,
   debug, traits::Get};
 use system::offchain::{SubmitSignedTransaction, SubmitUnsignedTransaction};
+use system::{ensure_none};
 use simple_json::{self, json::JsonValue};
 use runtime_io::{self, misc::print_utf8 as print_bytes};
 #[cfg(not(feature = "std"))]
@@ -70,17 +71,27 @@ pub trait Trait: timestamp::Trait + system::Trait {
   type BlockFetchDur: Get<Self::BlockNumber>;
 }
 
+type StrVecBytes = Vec<u8>;
+// Q: Is it possible to do:
+// type PricePoint = (Moment, u64);
+//
+// So inside Event enum, I can do:
+// ```
+// pub enum Event<T> where Moment = <T as timestamp::Trait>::Moment {
+//   FetchedPrice(StrVecBytes, StrVecBytes, PricePoint),
+//   ...
+
 decl_event!(
   pub enum Event<T> where Moment = <T as timestamp::Trait>::Moment {
-    FetchedPrice(Vec<u8>, Vec<u8>, Moment, u64),
-    AggregatedPrice(Vec<u8>, Moment, u64),
+    FetchedPrice(StrVecBytes, StrVecBytes, Moment, u64),
+    AggregatedPrice(StrVecBytes, Moment, u64),
   }
 );
 
 // This module's storage items.
 decl_storage! {
   trait Store for Module<T: Trait> as PriceFetch {
-    UpdateAggPP get(update_agg_pp): linked_map Vec<u8> => u32 = 0;
+    UpdateAggPP get(update_agg_pp): linked_map StrVecBytes => u32 = 0;
 
     // storage about source price points
     // mapping of ind -> (timestamp, price)
@@ -90,14 +101,14 @@ decl_storage! {
 
     // mapping of token sym -> pp_ind
     // Using linked map for easy traversal from offchain worker or UI
-    TokenSrcPPMap: map Vec<u8> => Vec<u32>;
+    TokenSrcPPMap: map StrVecBytes => Vec<u32>;
 
     // mapping of remote_src -> pp_ind
-    RemoteSrcPPMap: map Vec<u8> => Vec<u32>;
+    RemoteSrcPPMap: map StrVecBytes => Vec<u32>;
 
     // storage about aggregated price points (calculated with our logic)
     AggPricePoints get(agg_price_pts): Vec<(T::Moment, u64)>;
-    TokenAggPPMap: linked_map Vec<u8> => Vec<u32>;
+    TokenAggPPMap: map StrVecBytes => Vec<u32>;
   }
 }
 
@@ -110,64 +121,74 @@ decl_module! {
     fn deposit_event() = default;
 
     pub fn record_price(
-      _origin,
+      origin,
       _block: T::BlockNumber,
-      crypto_info: (Vec<u8>, Vec<u8>, Vec<u8>),
+      crypto_info: (StrVecBytes, StrVecBytes, StrVecBytes),
       price: u64
     ) -> dispatch::DispatchResult {
+      // Ensuring this is an unsigned tx
+      ensure_none(origin)?;
+
       let (sym, remote_src) = (crypto_info.0, crypto_info.1);
       let now = <timestamp::Module<T>>::get();
 
       // Debug printout
       debug::info!("record_price: {:?}, {:?}, {:?}",
-        core::str::from_utf8(&sym).unwrap(),
-        core::str::from_utf8(&remote_src).unwrap(),
+        core::str::from_utf8(&sym).map_err(|_| "`sym` conversion error")?,
+        core::str::from_utf8(&remote_src).map_err(|_| "`remote_src` conversion error")?,
         price
       );
+
+      let price_pt = (now, price);
+      // Get the len of SrcPricePoints which served as the next ID of price point
+      let pp_id: u32 = Self::src_price_pts().len().try_into()
+        .map_err(|_| DispatchError::Other("SrcPricePoints storage length retrieval failure."))?;
+      <SrcPricePoints<T>>::append(vec!(price_pt))?;
+
+      <TokenSrcPPMap>::append(&sym, vec!(pp_id))?;
+      <RemoteSrcPPMap>::append(&remote_src, vec!(pp_id))?;
+
+      // set the flag to kick off update aggregated pricing in offchain call
+      <UpdateAggPP>::mutate(&sym, |freq| *freq += 1);
 
       // Spit out an event and Add to storage
       Self::deposit_event(RawEvent::FetchedPrice(
         sym.clone(), remote_src.clone(), now.clone(), price));
 
-      let price_pt = (now, price);
-      // The index serves as the ID
-      let pp_id: u32 = Self::src_price_pts().len().try_into().unwrap();
-      <SrcPricePoints<T>>::mutate(|vec| vec.push(price_pt));
-      <TokenSrcPPMap>::mutate(sym.clone(), |token_vec| token_vec.push(pp_id));
-      <RemoteSrcPPMap>::mutate(remote_src, |rs_vec| rs_vec.push(pp_id));
-
-      // set the flag to kick off update aggregated pricing in offchain call
-      <UpdateAggPP>::mutate(sym.clone(), |freq| *freq += 1);
-
       Ok(())
     }
 
     pub fn record_agg_pp(
-      _origin,
+      origin,
       _block: T::BlockNumber,
-      sym: Vec<u8>,
+      sym: StrVecBytes,
       price: u64
     ) -> dispatch::DispatchResult {
       // Debug printout
       debug::info!("record_agg_pp: {}: {:?}",
-        core::str::from_utf8(&sym).unwrap(),
+        core::str::from_utf8(&sym).map_err(|_| "`sym` string conversion error")?,
         price
       );
 
+      // Ensuring this is an unsigned tx
+      ensure_none(origin)?;
+
       let now = <timestamp::Module<T>>::get();
+
+      // Record in the storage
+      let price_pt = (now.clone(), price.clone());
+      let pp_id: u32 = Self::agg_price_pts().len().try_into()
+        .map_err(|_| "AggPricePoints storage length retrieval failure.")?;
+
+      <AggPricePoints<T>>::append(vec![price_pt])?;
+      <TokenAggPPMap>::append(&sym, vec![pp_id])?;
+
+      // Turn off the flag as the request has been handled
+      <UpdateAggPP>::remove(&sym);
 
       // Spit the event
       Self::deposit_event(RawEvent::AggregatedPrice(
         sym.clone(), now.clone(), price.clone()));
-
-      // Record in the storage
-      let price_pt = (now.clone(), price.clone());
-      let pp_id: u32 = Self::agg_price_pts().len().try_into().unwrap();
-      <AggPricePoints<T>>::mutate(|vec| vec.push(price_pt));
-      <TokenAggPPMap>::mutate(sym.clone(), |vec| vec.push(pp_id));
-
-      // Turn off the flag as the request has been handled
-      <UpdateAggPP>::mutate(sym.clone(), |freq| *freq = 0);
 
       Ok(())
     }
