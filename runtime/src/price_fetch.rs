@@ -8,9 +8,9 @@
 /// https://github.com/paritytech/substrate/blob/master/srml/example/src/lib.rs
 
 // We have to import a few things
-use rstd::{prelude::*, convert::TryInto};
+use rstd::{prelude::*};
 use primitives::crypto::KeyTypeId;
-use support::{decl_module, decl_storage, decl_event, dispatch, dispatch::DispatchError,
+use support::{decl_module, decl_storage, decl_event, dispatch,
   debug, traits::Get};
 use system::offchain::{SubmitSignedTransaction, SubmitUnsignedTransaction};
 use system::{ensure_none};
@@ -26,7 +26,7 @@ use sp_runtime::{
   }
 };
 
-type StdResult<T> = core::result::Result<T, &'static str>;
+type Result<T> = core::result::Result<T, &'static str>;
 
 /// Our local KeyType.
 ///
@@ -91,24 +91,14 @@ decl_event!(
 // This module's storage items.
 decl_storage! {
   trait Store for Module<T: Trait> as PriceFetch {
-    UpdateAggPP get(update_agg_pp): linked_map StrVecBytes => u32 = 0;
-
-    // storage about source price points
-    // mapping of ind -> (timestamp, price)
+    // mapping of token sym -> (timestamp, price)
     //   price has been inflated by 10,000, and in USD.
     //   When used, it should be divided by 10,000.
-    SrcPricePoints get(src_price_pts): Vec<(T::Moment, u64)>;
-
-    // mapping of token sym -> pp_ind
     // Using linked map for easy traversal from offchain worker or UI
-    TokenSrcPPMap: map StrVecBytes => Vec<u32>;
-
-    // mapping of remote_src -> pp_ind
-    RemoteSrcPPMap: map StrVecBytes => Vec<u32>;
+    TokenSrcPPMap: linked_map StrVecBytes => Vec<(T::Moment, u64)>;
 
     // storage about aggregated price points (calculated with our logic)
-    AggPricePoints get(agg_price_pts): Vec<(T::Moment, u64)>;
-    TokenAggPPMap: map StrVecBytes => Vec<u32>;
+    TokenAggPPMap: linked_map StrVecBytes => (T::Moment, u64);
   }
 }
 
@@ -139,21 +129,10 @@ decl_module! {
         price
       );
 
-      let price_pt = (now, price);
-      // Get the len of SrcPricePoints which served as the next ID of price point
-      let pp_id: u32 = Self::src_price_pts().len().try_into()
-        .map_err(|_| DispatchError::Other("SrcPricePoints storage length retrieval failure."))?;
-      <SrcPricePoints<T>>::append(vec!(price_pt))?;
-
-      <TokenSrcPPMap>::append(&sym, vec!(pp_id))?;
-      <RemoteSrcPPMap>::append(&remote_src, vec!(pp_id))?;
-
-      // set the flag to kick off update aggregated pricing in offchain call
-      <UpdateAggPP>::mutate(&sym, |freq| *freq += 1);
+      <TokenSrcPPMap<T>>::mutate(&sym, |pp_vec| pp_vec.push((now, price)));
 
       // Spit out an event and Add to storage
-      Self::deposit_event(RawEvent::FetchedPrice(
-        sym.clone(), remote_src.clone(), now.clone(), price));
+      Self::deposit_event(RawEvent::FetchedPrice(sym, remote_src, now, price));
 
       Ok(())
     }
@@ -177,14 +156,10 @@ decl_module! {
 
       // Record in the storage
       let price_pt = (now.clone(), price.clone());
-      let pp_id: u32 = Self::agg_price_pts().len().try_into()
-        .map_err(|_| "AggPricePoints storage length retrieval failure.")?;
+      <TokenAggPPMap<T>>::insert(&sym, price_pt);
 
-      <AggPricePoints<T>>::append(vec![price_pt])?;
-      <TokenAggPPMap>::append(&sym, vec![pp_id])?;
-
-      // Turn off the flag as the request has been handled
-      <UpdateAggPP>::remove(&sym);
+      // Remove relevant storage items
+      <TokenSrcPPMap<T>>::remove(&sym);
 
       // Spit the event
       Self::deposit_event(RawEvent::AggregatedPrice(
@@ -193,10 +168,12 @@ decl_module! {
       Ok(())
     }
 
+    // Q: Does it matter if there is error happened in offchain_worker and offchain_worker
+    //   halt abruptedly
     fn offchain_worker(block: T::BlockNumber) {
       let duration = T::BlockFetchDur::get();
 
-      // Type I task: fetch_price
+      // Type I task: fetch price
       if duration > 0.into() && block % duration == 0.into() {
         for (sym, remote_src, remote_url) in FETCHED_CRYPTOS.iter() {
           if let Err(e) = Self::fetch_price(block, *sym, *remote_src, *remote_url) {
@@ -209,11 +186,11 @@ decl_module! {
       }
 
       // Type II task: aggregate price
-      <UpdateAggPP>::enumerate()
+      <TokenSrcPPMap<T>>::enumerate()
         // filter those to be updated
-        .filter(|(_, freq)| *freq > 0)
-        .for_each(|(sym, freq)| {
-          if let Err(e) = Self::aggregate_pp(block, &sym, freq as usize) {
+        .filter(|(_, vec)| vec.len() > 0)
+        .for_each(|(sym, _)| {
+          if let Err(e) = Self::aggregate_pp(block, &sym) {
             debug::error!("Error aggregating price of {:?}: {:?}",
               core::str::from_utf8(&sym).unwrap(), e);
           }
@@ -224,7 +201,7 @@ decl_module! {
 }
 
 impl<T: Trait> Module<T> {
-  fn fetch_json<'a>(remote_url: &'a [u8]) -> StdResult<JsonValue> {
+  fn fetch_json<'a>(remote_url: &'a [u8]) -> Result<JsonValue> {
     let remote_url_str = core::str::from_utf8(remote_url)
       .map_err(|_| "Error in converting remote_url to string")?;
 
@@ -245,7 +222,7 @@ impl<T: Trait> Module<T> {
     print_bytes(&json_result);
 
     let json_val: JsonValue = simple_json::parse_json(
-      &core::str::from_utf8(&json_result).unwrap())
+      &core::str::from_utf8(&json_result).map_err(|_| "JSON result cannot convert to string")?)
       .map_err(|_| "JSON parsing error")?;
 
     Ok(json_val)
@@ -256,7 +233,7 @@ impl<T: Trait> Module<T> {
     sym: &'a [u8],
     remote_src: &'a [u8],
     remote_url: &'a [u8]
-  ) -> dispatch::DispatchResult {
+  ) -> Result<()> {
     debug::info!("fetch price: {:?}:{:?}",
       core::str::from_utf8(sym).unwrap(),
       core::str::from_utf8(remote_src).unwrap()
@@ -280,7 +257,7 @@ impl<T: Trait> Module<T> {
 
     // Unsigned tx
     T::SubmitUnsignedTransaction::submit_unsigned(call)
-      .map_err(|_| DispatchError::Other("fetch_price: submit_signed(call) error"))
+      .map_err(|_| "fetch_price: submit_unsigned(call) error")
 
     // Signed tx
     // let local_accts = T::SubmitTransaction::find_local_keys(None);
@@ -289,23 +266,20 @@ impl<T: Trait> Module<T> {
     // T::SignAndSubmitTransaction::sign_and_submit(call, local_key);
 
     // T::SubmitSignedTransaction::submit_signed(call);
-    // Ok(())
   }
 
   fn vecchars_to_vecbytes<I: IntoIterator<Item = char> + Clone>(it: &I) -> Vec<u8> {
     it.clone().into_iter().map(|c| c as u8).collect::<_>()
   }
 
-  fn fetch_price_from_cryptocompare(json_val: JsonValue) -> StdResult<u64> {
+  fn fetch_price_from_cryptocompare(json_val: JsonValue) -> Result<u64> {
     // Expected JSON shape:
     //   r#"{"USD": 7064.16}"#;
-
     let val_f64: f64 = json_val.get_object()[0].1.get_number_f64();
-    let val_u64: u64 = (val_f64 * 10000.).round() as u64;
-    Ok(val_u64)
+    Ok((val_f64 * 10000.).round() as u64)
   }
 
-  fn fetch_price_from_coincap(json_val: JsonValue) -> StdResult<u64> {
+  fn fetch_price_from_coincap(json_val: JsonValue) -> Result<u64> {
     // Expected JSON shape:
     //   r#"{"data":{"priceUsd":"8172.2628346190447316"}}"#;
 
@@ -325,28 +299,21 @@ impl<T: Trait> Module<T> {
       .map_err(|_| "fetch_price_from_coincap: val_f64 convert to string error")?
       .parse::<f64>()
       .map_err(|_| "fetch_price_from_coincap: val_u8 parsing to f64 error")?;
-    let val_u64 = (val_f64 * 10000.).round() as u64;
-    Ok(val_u64)
+    Ok((val_f64 * 10000.).round() as u64)
   }
 
-  fn aggregate_pp<'a>(block: T::BlockNumber, sym: &'a [u8], freq: usize) -> dispatch::DispatchResult {
-    let ts_pp_vec = <TokenSrcPPMap>::get(sym);
-
-    // use the last `freq` number of prices and average them
-    let amt: usize = if ts_pp_vec.len() > freq { freq } else { ts_pp_vec.len() };
-    let pp_inds: &[u32] = ts_pp_vec.get((ts_pp_vec.len() - amt)..ts_pp_vec.len())
-      .ok_or("aggregate_pp: extracting TokenSrcPPMap error")?;
-
-    let src_pp_vec: Vec<_> = Self::src_price_pts();
-    let price_sum: u64 = pp_inds.iter().fold(0, |mem, ind| mem + src_pp_vec[*ind as usize].1);
-    let price_avg: u64 = (price_sum as f64 / amt as f64).round() as u64;
+  fn aggregate_pp<'a>(block: T::BlockNumber, sym: &'a [u8])
+    -> Result<()> {
+    let ts_pp_vec = <TokenSrcPPMap<T>>::get(sym);
+    let price_sum: u64 = ts_pp_vec.iter().fold(0, |mem, pp| mem + pp.1);
+    let price_avg: u64 = (price_sum as f64 / ts_pp_vec.len() as f64).round() as u64;
 
     // submit onchain call for aggregating the price
     let call = Call::record_agg_pp(block, sym.to_vec(), price_avg);
 
     // Unsigned tx
     T::SubmitUnsignedTransaction::submit_unsigned(call)
-      .map_err(|_| DispatchError::Other("aggregate_pp: submit_signed(call) error"))
+      .map_err(|_| "aggregate_pp: submit_signed(call) error")
 
     // Signed tx
     // T::SubmitSignedTransaction::submit_signed(call);
