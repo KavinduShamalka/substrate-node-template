@@ -304,7 +304,9 @@ impl<T: Trait> Module<T> {
     -> Result<()> {
     let ts_pp_vec = <TokenSrcPPMap<T>>::get(sym);
     let price_sum: u64 = ts_pp_vec.iter().fold(0, |mem, pp| mem + pp.1);
-    let price_avg: u64 = (price_sum as f64 / ts_pp_vec.len() as f64).round() as u64;
+
+    // Avoiding floating-point arithmetic & do integer division
+    let price_avg: u64 = price_sum / (ts_pp_vec.len() as u64);
 
     // submit onchain call for aggregating the price
     let call = Call::record_agg_pp(block, sym.to_vec(), price_avg);
