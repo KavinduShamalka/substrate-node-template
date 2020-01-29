@@ -5,9 +5,6 @@ version = "1.0.0"
 edition = "2018"
 build = "./build.rs"
 
-[lib]
-path = "./src/lib.rs"
-
 [dependencies]
 safe-mix = { version = "1.0.0", default-features = false }
 serde = { version = "1.0.101", optional = true, features = ["derive"] }

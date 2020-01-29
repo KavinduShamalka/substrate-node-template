@@ -41,6 +41,8 @@ pub use support::{
 	weights::Weight,
 };
 
+pub use price_fetch;
+
 /// An index to a block.
 pub type BlockNumber = u32;
 
