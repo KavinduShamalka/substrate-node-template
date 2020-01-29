@@ -3,7 +3,7 @@ EXE_FLAG = ARGV[0];
 NODE = "ocpf-node";
 PALLET = "pallet-price-fetch";
 
-node_root = File.expand_path("#{__dir__}/../node");
+node_root = File.expand_path("#{__dir__}/..");
 remote_project_root = File.expand_path("#{__dir__}/..");
 
 if (EXE_FLAG == "build")
