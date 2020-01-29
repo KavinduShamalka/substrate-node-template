@@ -67,32 +67,13 @@ impl timestamp::Trait for TestRuntime {
 pub type Extrinsic = TestXt<Call, ()>;
 type AccountId = u64;
 type AccountIndex = u64;
-type SubmitPFTransaction = system::offchain::TransactionSubmitter<
-  price_fetch::crypto::Public, Call, Extrinsic>;
+type SubmitPFTransaction = system::offchain::TransactionSubmitter<(), Call, Extrinsic>;
 
 parameter_types! {
   pub const BlockFetchDur: u64 = 1;
 }
 
 pub type PriceFetchModule = Module<TestRuntime>;
-
-impl system::offchain::CreateTransaction<TestRuntime, Extrinsic> for Call {
-  type Public = ();
-  type Signature = u64;
-
-  // Pay close attention to how this implementation --drastically-- differs from the real one
-  // in the top level runtime aggregator file, and how it creates a mock signature (which is
-  // actually the account id itself).
-  fn create_transaction<F: system::offchain::Signer<AccountId, Self::Signature>>(
-    call: Call,
-    public: Self::Public,
-    account: AccountId,
-    _index: AccountIndex,
-  ) -> Option<(Call, <Extrinsic as sp_runtime::traits::Extrinsic>::SignaturePayload)> {
-    let extra = ();
-    Some((call, (account, extra)))
-  }
-}
 
 impl Trait for TestRuntime {
   type Event = ();

@@ -41,6 +41,9 @@ pub use support::{
 	weights::Weight,
 };
 
+// our module
+pub use price_fetch;
+
 /// An index to a block.
 pub type BlockNumber = u32;
 
@@ -66,9 +69,6 @@ pub type Hash = primitives::H256;
 
 /// Digest item type.
 pub type DigestItem = generic::DigestItem<Hash>;
-
-/// Our modules (two modules here)
-pub mod price_fetch;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
 /// the specifics of the runtime. They can then be made to be agnostic over specific formats

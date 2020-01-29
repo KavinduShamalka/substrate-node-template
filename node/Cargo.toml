@@ -1,13 +1,16 @@
+[workspace]
+members = ["pallets/price-fetch"]
+
 [package]
 name = 'ocpf-node'
 authors = ["Jimmy Chu"]
 version = '2.0.0'
 edition = '2018'
-build = 'build.rs'
+build = './build.rs'
 
 [[bin]]
 name = 'ocpf-node'
-path = 'src/main.rs'
+path = './src/main.rs'
 
 [dependencies]
 futures = "0.3.1"
@@ -106,8 +109,8 @@ rev = "3e651110aa06aa835790df63410a29676243fc54"
 version = "2.0.0"
 
 [dependencies.runtime]
-package = "ocpf-runtime"
-path = ".."
+package = "runtime"
+path = "./runtime"
 
 [dependencies.sp-runtime]
 git = "https://github.com/paritytech/substrate.git"

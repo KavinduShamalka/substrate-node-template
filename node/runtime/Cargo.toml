@@ -1,15 +1,12 @@
-[workspace]
-members = ["node"]
-
 [package]
-name = "ocpf-runtime"
+name = "runtime"
 authors = ["Jimmy Chu"]
-version = "2.0.0"
+version = "1.0.0"
 edition = "2018"
-build = "runtime/build.rs"
+build = "./build.rs"
 
 [lib]
-path = "runtime/src/lib.rs"
+path = "./src/lib.rs"
 
 [dependencies]
 safe-mix = { version = "1.0.0", default-features = false }
@@ -178,10 +175,10 @@ package = "sp-version"
 default-features = false
 version = "2.0.0"
 
-[dependencies.simple-json]
-git = 'https://github.com/jimmychu0807/simple-json'
-version = '0.1.5'
-default_features = false
+[dependencies.pallet-price-fetch]
+path = "../pallets/price-fetch"
+default-features = false
+version = "1.0.0"
 
 [build-dependencies.wasm-builder-runner]
 git = "https://github.com/paritytech/substrate.git"
@@ -202,6 +199,7 @@ std = [
 	"indices/std",
 	"inherents/std",
 	"offchain-primitives/std",
+	"pallet-price-fetch/std",
 	"primitives/std",
 	"randomness-collective-flip/std",
 	"rstd/std",
