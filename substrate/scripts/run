@@ -10,8 +10,6 @@ if (EXE_FLAG == "build")
   system("cd #{node_root}; cargo remote -- build --release")
 elsif (EXE_FLAG == "build-pallet")
   system("cd #{node_root}; cargo remote -- build --release -p #{PALLET}")
-elsif (EXE_FLAG == "build-runtime")
-  system("cd #{node_root}; cargo remote -- build --release -p runtime")
 else
   if (EXE_FLAG == "clean")
     # this cmd meant to be run in remote dev host
