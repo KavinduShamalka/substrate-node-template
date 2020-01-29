@@ -1,3 +1,5 @@
+#![cfg(test)]
+
 /// tests for this module
 
 // Test cases:

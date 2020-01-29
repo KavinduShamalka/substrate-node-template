@@ -175,8 +175,9 @@ package = "sp-version"
 default-features = false
 version = "2.0.0"
 
-[dependencies.pallet-price-fetch]
+[dependencies.price_fetch]
 path = "../pallets/price-fetch"
+package = "pallet-price-fetch"
 default-features = false
 version = "1.0.0"
 
@@ -199,7 +200,7 @@ std = [
 	"indices/std",
 	"inherents/std",
 	"offchain-primitives/std",
-	"pallet-price-fetch/std",
+	"price_fetch/std",
 	"primitives/std",
 	"randomness-collective-flip/std",
 	"rstd/std",

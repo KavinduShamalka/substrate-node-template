@@ -1,5 +1,8 @@
 [workspace]
-members = ["pallets/price-fetch"]
+members = [
+  "runtime",
+  "pallets/price-fetch"
+]
 
 [package]
 name = 'ocpf-node'

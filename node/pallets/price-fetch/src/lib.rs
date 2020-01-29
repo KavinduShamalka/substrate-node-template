@@ -1,3 +1,6 @@
+// Ensure we're `no_std` when compiling for Wasm.
+#![cfg_attr(not(feature = "std"), no_std)]
+
 /// A runtime module template with necessary imports
 
 /// Feel free to remove or edit this file as needed.
@@ -6,6 +9,9 @@
 
 /// For more guidance on Substrate modules, see the example module
 /// https://github.com/paritytech/substrate/blob/master/srml/example/src/lib.rs
+
+mod mock;
+mod tests;
 
 // We have to import a few things
 use rstd::{prelude::*};
