@@ -173,7 +173,7 @@ default-features = false
 version = "2.0.0"
 
 [dependencies.price_fetch]
-path = "../pallets/price-fetch"
+path = "../../pallets/price-fetch"
 package = "pallet-price-fetch"
 default-features = false
 version = "1.0.0"
