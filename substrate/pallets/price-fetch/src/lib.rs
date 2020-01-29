@@ -18,7 +18,7 @@ use rstd::{prelude::*};
 use primitives::crypto::KeyTypeId;
 use support::{decl_module, decl_storage, decl_event, dispatch,
   debug, traits::Get};
-use system::offchain::{SubmitSignedTransaction, SubmitUnsignedTransaction};
+use system::offchain::{SubmitUnsignedTransaction};
 use system::{ensure_none};
 use simple_json::{self, json::JsonValue};
 use runtime_io::{self, misc::print_utf8 as print_bytes};
@@ -69,7 +69,6 @@ pub trait Trait: timestamp::Trait + system::Trait {
   /// The overarching event type.
   type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
   type Call: From<Call<Self>>;
-  type SubmitSignedTransaction: SubmitSignedTransaction<Self, <Self as Trait>::Call>;
   type SubmitUnsignedTransaction: SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
 
   // Wait period between automated fetches. Set to 0 disable this feature.

@@ -257,34 +257,34 @@ impl price_fetch::Trait for Runtime {
 	type BlockFetchDur = BlockFetchDur;
 }
 
-impl system::offchain::CreateTransaction<Runtime, UncheckedExtrinsic> for Runtime {
-	type Public = <Signature as Verify>::Signer;
-	type Signature = Signature;
+// impl system::offchain::CreateTransaction<Runtime, UncheckedExtrinsic> for Runtime {
+// 	type Public = <Signature as Verify>::Signer;
+// 	type Signature = Signature;
 
-	fn create_transaction<TSigner: system::offchain::Signer<Self::Public, Self::Signature>> (
-		call: Call,
-		public: Self::Public,
-		account: AccountId,
-		index: Index,
-	) -> Option<(Call, <UncheckedExtrinsic as sp_runtime::traits::Extrinsic>::SignaturePayload)> {
-		let period = 1 << 8;
-		let current_block = System::block_number().saturated_into::<u64>();
-		let tip = 0;
-		let extra: SignedExtra = (
-			system::CheckVersion::<Runtime>::new(),
-			system::CheckGenesis::<Runtime>::new(),
-			system::CheckEra::<Runtime>::from(generic::Era::mortal(period, current_block)),
-			system::CheckNonce::<Runtime>::from(index),
-			system::CheckWeight::<Runtime>::new(),
-			transaction_payment::ChargeTransactionPayment::<Runtime>::from(tip),
-		);
-		let raw_payload = SignedPayload::new(call, extra).ok()?;
-		let signature = TSigner::sign(public, &raw_payload)?;
-		let address = Indices::unlookup(account);
-		let (call, extra, _) = raw_payload.deconstruct();
-		Some((call, (address, signature, extra)))
-	}
-}
+// 	fn create_transaction<TSigner: system::offchain::Signer<Self::Public, Self::Signature>> (
+// 		call: Call,
+// 		public: Self::Public,
+// 		account: AccountId,
+// 		index: Index,
+// 	) -> Option<(Call, <UncheckedExtrinsic as sp_runtime::traits::Extrinsic>::SignaturePayload)> {
+// 		let period = 1 << 8;
+// 		let current_block = System::block_number().saturated_into::<u64>();
+// 		let tip = 0;
+// 		let extra: SignedExtra = (
+// 			system::CheckVersion::<Runtime>::new(),
+// 			system::CheckGenesis::<Runtime>::new(),
+// 			system::CheckEra::<Runtime>::from(generic::Era::mortal(period, current_block)),
+// 			system::CheckNonce::<Runtime>::from(index),
+// 			system::CheckWeight::<Runtime>::new(),
+// 			transaction_payment::ChargeTransactionPayment::<Runtime>::from(tip),
+// 		);
+// 		let raw_payload = SignedPayload::new(call, extra).ok()?;
+// 		let signature = TSigner::sign(public, &raw_payload)?;
+// 		let address = Indices::unlookup(account);
+// 		let (call, extra, _) = raw_payload.deconstruct();
+// 		Some((call, (address, signature, extra)))
+// 	}
+// }
 
 construct_runtime!(
 	pub enum Runtime where
