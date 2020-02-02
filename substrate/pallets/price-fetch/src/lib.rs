@@ -10,7 +10,7 @@
 /// For more guidance on Substrate modules, see the example module
 /// https://github.com/paritytech/substrate/blob/master/srml/example/src/lib.rs
 
-mod mock;
+#[cfg(test)]
 mod tests;
 
 // We have to import a few things
@@ -326,9 +326,11 @@ impl<T: Trait> Module<T> {
   }
 }
 
+#[allow(deprecated)]
 impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
   type Call = Call<T>;
 
+  #[allow(deprecated)]
   fn validate_unsigned(call: &Self::Call) -> TransactionValidity {
 
     match call {
