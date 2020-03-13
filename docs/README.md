@@ -30,8 +30,8 @@ in the [`node`](node) folder, and
 [Substrate Front-end Template](https://github.com/substrate-developer-hub/substrate-front-end-template)
 in the [`frontend`](frontend) folder.
 
-The meat of the project is in [`node/runtime/src/lib.rs`](node/runtime/src/lib.rs) and
-[`node/runtime/src/price_fetch.rs`](node/runtime/src/price_fetch.rs).
+The meat of the project is in [`node/runtime/src/lib.rs`](../node/runtime/src/lib.rs) and
+[`node/runtime/src/price_fetch.rs`](../node/runtime/src/price_fetch.rs).
 
 ### 1. `node/runtime/src/lib.rs`
 
@@ -80,7 +80,7 @@ impl system::offchain::CreateTransaction<Runtime, UncheckedExtrinsic> for Runtim
 
 ### 2. `node/runtime/src/price_fetch.rs`
 
-Feel free to look at the [src code](node/runtime/src/price_fetch.rs) side by side with the
+Feel free to look at the [src code](../node/runtime/src/price_fetch.rs) side by side with the
 following description.
 
 Note the necessary included modules at the top for:
