@@ -130,4 +130,4 @@ It is based on [Substrate Front-end Template](https://github.com/substrate-devel
 
 ## Further Enhancement
 
-- Tracked in [issue #11](../../issues/11).
+- Tracked in [issue #11](https://github.com/jimmychu0807/substrate-offchain-pricefetch/issues/11).
