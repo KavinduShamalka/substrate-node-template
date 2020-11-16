@@ -18,7 +18,7 @@ does offer this feature of
 [Off-chain Worker](https://substrate.dev/docs/en/next/conceptual/core/off-chain-workers).
 This project is a demonstration of this feature.
 
-This project consists of a Substrate node with a [custom pallet](node/runtime/src/price_fetch.rs)
+This project consists of a Substrate node with a [custom pallet](../substrate/pallets/price-fetch/src/lib.rs)
 that use off-chain worker to fetch prices of a few cryptocurrencies, each from two external sources
 and then aggregate them by simply averaging and recording them back to on-chain storage.
 
@@ -26,14 +26,14 @@ and then aggregate them by simply averaging and recording them back to on-chain 
 
 This project has a setup of using
 [Substrate Node Template](https://github.com/substrate-developer-hub/substrate-node-template)
-in the [`node`](node) folder, and
+in the [`node`](../substrate/node) folder, and
 [Substrate Front-end Template](https://github.com/substrate-developer-hub/substrate-front-end-template)
-in the [`frontend`](frontend) folder.
+in the [`frontend`](../frontend) folder.
 
-The meat of the project is in [`node/runtime/src/lib.rs`](node/runtime/src/lib.rs) and
-[`node/runtime/src/price_fetch.rs`](node/runtime/src/price_fetch.rs).
+The meat of the project is in [`substrate/node/runtime/src/lib.rs`](../substrate/node/runtime/src/lib.rs) and
+[`substrate/pallets/price-fetch/src/lib.rs`](../substrate/pallets/price-fetch/src/lib.rs).
 
-### 1. `node/runtime/src/lib.rs`
+### 1. `substrate/node/runtime/src/lib.rs`
 
 In this file, in addition to the regular lib setup, we specify a `SubmitPFTransaction` type and set
  it as the associated type for our pallet trait. We then implement the
@@ -78,9 +78,9 @@ impl system::offchain::CreateTransaction<Runtime, UncheckedExtrinsic> for Runtim
 // -- snip --
 ```
 
-### 2. `node/runtime/src/price_fetch.rs`
+### 2. `substrate/pallets/price-fetch/src/lib.rs`
 
-Feel free to look at the [src code](node/runtime/src/price_fetch.rs) side by side with the
+Feel free to look at the [src code](../substrate/pallets/price-fetch/src/lib.rs) side by side with the
 following description.
 
 Note the necessary included modules at the top for:
@@ -130,4 +130,4 @@ It is based on [Substrate Front-end Template](https://github.com/substrate-devel
 
 ## Further Enhancement
 
-- Tracked in [issue #11](../../issues/11).
+- Tracked in [issue #11](https://github.com/jimmychu0807/substrate-offchain-pricefetch/issues/11).
