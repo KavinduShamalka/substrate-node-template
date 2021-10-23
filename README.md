@@ -27,5 +27,15 @@ applies to this repository as well.
 
 ### About Off-chain Worker
 
-Goto [here](docs/ocw-index.md) to learn more about off-chain worker (extracted from Substrate
-Recipes, based on Substrate v3).
+- The core of OCW features are demonstrated in [`pallets-ocw`](./pallets/ocw/src/lib.rs), and
+[`pallets-example-offchain-worker`](./pallets/example-offchain-worker/src/lib.rs).
+
+  Note that in order for the offchain worker to run, we have injected *Alice* key in
+[`node/service.rs`](node/src/service.rs#L93-L104)
+
+- Goto [here](docs/ocw-index.md) to learn more about off-chain worker (extracted from Substrate
+  Recipes, based on Substrate v3).
+
+- Review the code of [**Offchain Worker Example Pallet** within Substrate](https://paritytech.github.io/substrate/latest/src/pallet_example_offchain_worker/lib.rs.html#18-709)
+  and its [rustdoc](https://paritytech.github.io/substrate/latest/pallet_example_offchain_worker/).
+  This pallet is also [added in this repository](pallets/example-offchain-worker).
