@@ -33,7 +33,7 @@ applies to this repository as well.
   Note that in order for the offchain worker to run, we have injected *Alice* key in
 [`node/service.rs`](node/src/service.rs#L93-L104)
 
-- Goto [here](docs/ocw-index.md) to learn more about off-chain worker (extracted from Substrate
+- Goto [**docs/README.md**](docs/README.md) to learn more about off-chain worker (extracted from Substrate
   Recipes, based on Substrate v3).
 
 - Review the code of [**Offchain Worker Example Pallet** within Substrate](https://paritytech.github.io/substrate/latest/src/pallet_example_offchain_worker/lib.rs.html#18-709)
