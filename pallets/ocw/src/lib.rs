@@ -5,7 +5,7 @@ pub use pallet::*;
 #[frame_support::pallet]
 pub mod pallet {
 	//! A demonstration of an offchain worker that sends onchain callbacks
-	use core::{convert::TryInto};
+	use core::convert::TryInto;
 	use parity_scale_codec::{Decode, Encode};
 	use frame_support::pallet_prelude::*;
 	use frame_system::{
@@ -15,7 +15,7 @@ pub mod pallet {
 			SignedPayload, Signer, SigningTypes, SubmitTransaction,
 		},
 	};
-	use sp_core::{crypto::KeyTypeId};
+	use sp_core::crypto::KeyTypeId;
 	use sp_runtime::{
 		offchain::{
 			http,
